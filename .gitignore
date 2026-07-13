@@ -1,0 +1,41 @@
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Datos y persistencia
+data/*
+!data/.gitkeep
+postgres-data/
+minio-data/
+ollama-data/
+chroma-data/
+mlflow-data/
+metabase-data/
+pixelrag-data/
+mlruns/
+
+# Resultados y artefactos
+artifacts/
+results/
+exports/
+indexes/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
