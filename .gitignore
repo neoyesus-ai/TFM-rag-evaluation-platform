@@ -1,0 +1,50 @@
+# Variables y secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Datos generados
+data/*
+!data/.gitkeep
+
+# Persistencia de servicios
+postgres-data/
+minio-data/
+ollama-data/
+chroma-data/
+mlflow-data/
+metabase-data/
+pixelrag-data/
+mlruns/
+
+# Artefactos y resultados
+artifacts/
+results/
+exports/
+indexes/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
