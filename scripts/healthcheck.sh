@@ -2,6 +2,7 @@
 
 set -uo pipefail
 
+BACKEND_URL="${BACKEND_URL:-http://localhost:8000/health}"
 CHROMA_URL="${CHROMA_URL:-http://localhost:8001/api/v2/heartbeat}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434/api/tags}"
 MINIO_URL="${MINIO_URL:-http://localhost:9000/minio/health/live}"
@@ -31,7 +32,9 @@ check_postgres() {
     printf "Comprobando %-12s ... " "PostgreSQL"
 
     if docker compose exec -T postgres \
-        pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1; then
+        pg_isready \
+        -U "${POSTGRES_USER:-postgres}" \
+        -d "${POSTGRES_DB:-postgres}" >/dev/null 2>&1; then
         echo "OK"
     else
         echo "ERROR"
@@ -40,6 +43,7 @@ check_postgres() {
 }
 
 check_postgres
+check_http "Backend" "$BACKEND_URL"
 check_http "ChromaDB" "$CHROMA_URL"
 check_http "Ollama" "$OLLAMA_URL"
 check_http "MinIO" "$MINIO_URL"
@@ -51,4 +55,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-echo "Todos los servicios de infraestructura están disponibles."
+echo "Todos los servicios están disponibles."
