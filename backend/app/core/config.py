@@ -20,6 +20,12 @@ class Settings(BaseSettings):
 
     minio_host: str = "minio"
     minio_port: int = 9000
+    minio_root_user: str = "minioadmin"
+    minio_root_password: str = "minioadmin"
+    minio_bucket_documents: str = "documents"
+    minio_secure: bool = False
+
+    max_upload_size_mb: int = 25
 
     model_config = SettingsConfigDict(
         env_file=".env",
