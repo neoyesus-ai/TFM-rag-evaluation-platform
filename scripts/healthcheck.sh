@@ -2,6 +2,7 @@
 
 set -uo pipefail
 
+FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000/health}"
 CHROMA_URL="${CHROMA_URL:-http://localhost:8001/api/v2/heartbeat}"
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434/api/tags}"
@@ -31,10 +32,9 @@ check_http() {
 check_postgres() {
     printf "Comprobando %-12s ... " "PostgreSQL"
 
-    if docker compose exec -T postgres \
-        pg_isready \
-        -U "${POSTGRES_USER:-postgres}" \
-        -d "${POSTGRES_DB:-postgres}" >/dev/null 2>&1; then
+    if docker compose exec -T postgres sh -c \
+        'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+        >/dev/null 2>&1; then
         echo "OK"
     else
         echo "ERROR"
@@ -43,6 +43,7 @@ check_postgres() {
 }
 
 check_postgres
+check_http "Frontend" "$FRONTEND_URL"
 check_http "Backend" "$BACKEND_URL"
 check_http "ChromaDB" "$CHROMA_URL"
 check_http "Ollama" "$OLLAMA_URL"

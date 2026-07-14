@@ -1,0 +1,70 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #172033;
+  background: #f4f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  width: min(1100px, 92%);
+  margin: 0 auto;
+  padding: 48px 0;
+}
+
+.header {
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  margin: 8px 0;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.panel {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 10px 35px rgba(23, 32, 51, 0.08);
+}
+
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.service-card {
+  border: 1px solid #dfe5ee;
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.service-card h3 {
+  margin-top: 0;
+  text-transform: capitalize;
+}
+
+.ok {
+  color: #08783e;
+  font-weight: 700;
+}
+
+.error {
+  color: #b42318;
+  font-weight: 700;
+}
