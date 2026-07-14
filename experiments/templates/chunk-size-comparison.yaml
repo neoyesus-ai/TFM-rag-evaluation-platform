@@ -1,0 +1,44 @@
+template_key: chunk-size-comparison-v1
+schema_version: "1.0"
+name: Comparación de tamaño de chunk
+description: Evalúa el efecto del tamaño de los fragmentos manteniendo constantes el resto de parámetros.
+category: chunking
+tags:
+  - chunking
+  - chunk-size
+  - comparison
+
+configuration:
+  schema_version: "1.0"
+
+  chunking:
+    strategy: recursive
+    chunk_size: 512
+    chunk_overlap: 64
+
+  embedding:
+    provider: ollama
+    model: nomic-embed-text
+
+  retrieval:
+    strategy: similarity
+    top_k: 5
+
+  generation:
+    provider: ollama
+    model: llama3.1
+    temperature: 0.0
+
+  evaluation:
+    metrics:
+      - faithfulness
+      - answer_relevancy
+      - context_precision
+      - context_recall
+      - latency_ms
+
+matrix:
+  chunking.chunk_size:
+    - 256
+    - 512
+    - 1024

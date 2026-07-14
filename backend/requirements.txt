@@ -25,3 +25,5 @@ httpx
 python-multipart
 
 minio
+
+PyYAML==6.0.2

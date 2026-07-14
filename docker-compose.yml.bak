@@ -1,3 +1,4 @@
+cat > docker-compose.yml <<'EOF'
 services:
   postgres:
     image: postgres:16-alpine
@@ -288,3 +289,4 @@ volumes:
 
   frontend_node_modules:
     name: tfm-frontend-node-modules
+EOF
