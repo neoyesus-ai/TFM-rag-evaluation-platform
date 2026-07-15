@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     minio_bucket_documents: str = "documents"
     minio_secure: bool = False
 
+    mlflow_tracking_uri: str = "http://mlflow:5000"
+    mlflow_experiment_name: str = "tfm-rag-experiments"
+
     max_upload_size_mb: int = 25
 
     model_config = SettingsConfigDict(

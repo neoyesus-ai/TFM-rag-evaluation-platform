@@ -118,8 +118,12 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
       AWS_DEFAULT_REGION: us-east-1
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      MLFLOW_SERVER_ALLOWED_HOSTS: >-
+        mlflow,mlflow:5000,localhost,localhost:5000,
+        127.0.0.1,127.0.0.1:5000
+      GIT_PYTHON_REFRESH: quiet
     command:
       - mlflow
       - server
@@ -132,6 +136,8 @@ services:
       - --artifacts-destination
       - s3://mlflow-artifacts
       - --serve-artifacts
+      - --allowed-hosts
+      - mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
     ports:
       - "5000:5000"
     depends_on:
@@ -194,7 +200,7 @@ services:
     environment:
       APP_NAME: "TFM RAG Evaluation Platform"
       APP_VERSION: "0.1.0"
-      ENVIRONMENT: "development"
+      ENVIRONMENT: development
 
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
