@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.experiment.context import ExperimentContext
 from app.experiment.stages import (
     ChunkingStage,
+    EmbeddingStage,
     ExperimentStage,
     LoadDocumentsStage,
 )
@@ -52,34 +53,32 @@ def flatten_configuration(
 def create_configuration_artifact(
     context: ExperimentContext,
 ) -> Path:
-    directory = (
+    configuration_directory = (
         context.working_directory / "configuration"
     )
-    directory.mkdir(
+
+    configuration_directory.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    path = (
-        directory / "resolved-configuration.json"
+    configuration_path = (
+        configuration_directory
+        / "resolved-configuration.json"
     )
 
     payload = {
         "experiment": {
             "id": str(context.experiment.id),
             "name": context.experiment.name,
-            "description": (
-                context.experiment.description
-            ),
+            "description": context.experiment.description,
             "corpus_id": str(
                 context.experiment.corpus_id
             ),
         },
         "version": {
             "id": str(context.version.id),
-            "number": (
-                context.version.version_number
-            ),
+            "number": context.version.version_number,
             "schema_version": (
                 context.version.schema_version
             ),
@@ -89,16 +88,12 @@ def create_configuration_artifact(
             "source_template_key": (
                 context.version.source_template_key
             ),
-            "git_commit": (
-                context.version.git_commit
-            ),
+            "git_commit": context.version.git_commit,
         },
-        "configuration": (
-            context.version.configuration
-        ),
+        "configuration": context.version.configuration,
     }
 
-    path.write_text(
+    configuration_path.write_text(
         json.dumps(
             payload,
             ensure_ascii=False,
@@ -107,9 +102,11 @@ def create_configuration_artifact(
         encoding="utf-8",
     )
 
-    context.artifacts["configuration"] = directory
+    context.artifacts[
+        "configuration"
+    ] = configuration_directory
 
-    return path
+    return configuration_path
 
 
 def build_pipeline(
@@ -118,6 +115,7 @@ def build_pipeline(
     return [
         LoadDocumentsStage(session=session),
         ChunkingStage(),
+        EmbeddingStage(),
     ]
 
 
@@ -142,10 +140,63 @@ async def execute_pipeline(
     ] = completed_stages
 
 
+def create_pipeline_manifest(
+    context: ExperimentContext,
+) -> Path:
+    pipeline_directory = (
+        context.working_directory / "pipeline"
+    )
+
+    pipeline_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    manifest_path = (
+        pipeline_directory
+        / "pipeline-manifest.json"
+    )
+
+    payload = {
+        "experiment_id": str(context.experiment.id),
+        "experiment_version_id": str(
+            context.version.id
+        ),
+        "run_id": str(context.run.id),
+        "mlflow_run_id": context.run.mlflow_run_id,
+        "completed_stages": context.metadata.get(
+            "completed_stages",
+            [],
+        ),
+        "metrics": context.metrics,
+        "metadata": context.metadata,
+        "artifacts": {
+            key: str(value)
+            for key, value in context.artifacts.items()
+        },
+    }
+
+    manifest_path.write_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    context.artifacts[
+        "pipeline"
+    ] = pipeline_directory
+
+    return manifest_path
+
+
 def log_context_to_mlflow(
     context: ExperimentContext,
 ) -> None:
-    mlflow.log_metrics(context.metrics)
+    if context.metrics:
+        mlflow.log_metrics(context.metrics)
 
     for artifact_path, directory in (
         context.artifacts.items()
@@ -154,38 +205,6 @@ def log_context_to_mlflow(
             local_dir=str(directory),
             artifact_path=artifact_path,
         )
-
-    pipeline_manifest = (
-        context.working_directory
-        / "pipeline-manifest.json"
-    )
-
-    pipeline_manifest.write_text(
-        json.dumps(
-            {
-                "completed_stages": (
-                    context.metadata.get(
-                        "completed_stages",
-                        [],
-                    )
-                ),
-                "metrics": context.metrics,
-                "artifacts": {
-                    key: str(value)
-                    for key, value
-                    in context.artifacts.items()
-                },
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-    mlflow.log_artifact(
-        str(pipeline_manifest),
-        artifact_path="pipeline",
-    )
 
 
 async def execute_experiment_run(
@@ -209,20 +228,17 @@ async def execute_experiment_run(
         mlflow.set_tracking_uri(
             settings.mlflow_tracking_uri
         )
+
         mlflow.set_experiment(
             settings.mlflow_experiment_name
         )
 
         tags = {
-            "project": (
-                "TFM-rag-evaluation-platform"
-            ),
+            "project": "TFM-rag-evaluation-platform",
             "run_type": "experiment",
             "environment": settings.environment,
             "experiment_id": str(experiment.id),
-            "experiment_version_id": str(
-                version.id
-            ),
+            "experiment_version_id": str(version.id),
             "experiment_version": str(
                 version.version_number
             ),
@@ -232,16 +248,16 @@ async def execute_experiment_run(
             "source_template_key": (
                 version.source_template_key or ""
             ),
-            "git_commit": (
-                version.git_commit or ""
-            ),
+            "git_commit": version.git_commit or "",
         }
 
+        run_name = (
+            f"{experiment.name}"
+            f"-v{version.version_number}"
+        )
+
         with mlflow.start_run(
-            run_name=(
-                f"{experiment.name}"
-                f"-v{version.version_number}"
-            ),
+            run_name=run_name,
             tags=tags,
         ) as active_mlflow_run:
             run.mlflow_run_id = (
@@ -251,11 +267,12 @@ async def execute_experiment_run(
             await session.commit()
             await session.refresh(run)
 
-            mlflow.log_params(
-                flatten_configuration(
-                    version.configuration
-                )
+            parameters = flatten_configuration(
+                version.configuration
             )
+
+            if parameters:
+                mlflow.log_params(parameters)
 
             with tempfile.TemporaryDirectory() as temp:
                 context = ExperimentContext(
@@ -266,7 +283,7 @@ async def execute_experiment_run(
                 )
 
                 create_configuration_artifact(
-                    context
+                    context=context
                 )
 
                 pipeline = build_pipeline(
@@ -290,7 +307,13 @@ async def execute_experiment_run(
                     )
                 )
 
-                log_context_to_mlflow(context)
+                create_pipeline_manifest(
+                    context=context
+                )
+
+                log_context_to_mlflow(
+                    context=context
+                )
 
         run.status = "completed"
         run.finished_at = datetime.now(

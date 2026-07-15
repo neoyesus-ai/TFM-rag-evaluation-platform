@@ -27,3 +27,5 @@ python-multipart
 minio
 
 PyYAML==6.0.2
+
+numpy

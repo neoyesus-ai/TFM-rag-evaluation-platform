@@ -19,10 +19,25 @@ class ExperimentContext:
     run: ExperimentRun
     working_directory: Path
 
-    document_records: list[Document] = field(default_factory=list)
-    loaded_documents: list[LoadedDocument] = field(default_factory=list)
-    chunks: list[TextChunk] = field(default_factory=list)
+    document_records: list[Document] = field(
+        default_factory=list
+    )
+    loaded_documents: list[LoadedDocument] = field(
+        default_factory=list
+    )
+    chunks: list[TextChunk] = field(
+        default_factory=list
+    )
+    embeddings: list[list[float]] = field(
+        default_factory=list
+    )
 
-    metrics: dict[str, float] = field(default_factory=dict)
-    artifacts: dict[str, Path] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metrics: dict[str, float] = field(
+        default_factory=dict
+    )
+    artifacts: dict[str, Path] = field(
+        default_factory=dict
+    )
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )
