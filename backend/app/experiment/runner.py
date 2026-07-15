@@ -16,6 +16,7 @@ from app.experiment.stages import (
     ExperimentStage,
     IndexingStage,
     LoadDocumentsStage,
+    RetrievalStage,
 )
 from app.models.experiment import (
     Experiment,
@@ -28,10 +29,17 @@ def flatten_configuration(
     source: dict[str, Any],
     prefix: str = "",
 ) -> dict[str, str | int | float | bool]:
-    flattened: dict[str, str | int | float | bool] = {}
+    flattened: dict[
+        str,
+        str | int | float | bool,
+    ] = {}
 
     for key, value in source.items():
-        full_key = f"{prefix}.{key}" if prefix else key
+        full_key = (
+            f"{prefix}.{key}"
+            if prefix
+            else key
+        )
 
         if isinstance(value, dict):
             flattened.update(
@@ -72,14 +80,23 @@ def create_configuration_artifact(
         "experiment": {
             "id": str(context.experiment.id),
             "name": context.experiment.name,
-            "description": context.experiment.description,
+            "description": (
+                context.experiment.description
+            ),
             "corpus_id": str(
                 context.experiment.corpus_id
+            ),
+            "dataset_id": (
+                str(context.experiment.dataset_id)
+                if context.experiment.dataset_id
+                else None
             ),
         },
         "version": {
             "id": str(context.version.id),
-            "number": context.version.version_number,
+            "number": (
+                context.version.version_number
+            ),
             "schema_version": (
                 context.version.schema_version
             ),
@@ -89,9 +106,13 @@ def create_configuration_artifact(
             "source_template_key": (
                 context.version.source_template_key
             ),
-            "git_commit": context.version.git_commit,
+            "git_commit": (
+                context.version.git_commit
+            ),
         },
-        "configuration": context.version.configuration,
+        "configuration": (
+            context.version.configuration
+        ),
     }
 
     configuration_path.write_text(
@@ -118,6 +139,7 @@ def build_pipeline(
         ChunkingStage(),
         EmbeddingStage(),
         IndexingStage(),
+        RetrievalStage(session=session),
     ]
 
 
@@ -125,7 +147,9 @@ async def execute_pipeline(
     context: ExperimentContext,
     pipeline: list[ExperimentStage],
 ) -> None:
-    completed_stages: list[dict[str, Any]] = []
+    completed_stages: list[
+        dict[str, Any]
+    ] = []
 
     for stage in pipeline:
         result = await stage.run(context)
@@ -160,21 +184,28 @@ def create_pipeline_manifest(
     )
 
     payload = {
-        "experiment_id": str(context.experiment.id),
+        "experiment_id": str(
+            context.experiment.id
+        ),
         "experiment_version_id": str(
             context.version.id
         ),
         "run_id": str(context.run.id),
-        "mlflow_run_id": context.run.mlflow_run_id,
-        "completed_stages": context.metadata.get(
-            "completed_stages",
-            [],
+        "mlflow_run_id": (
+            context.run.mlflow_run_id
+        ),
+        "completed_stages": (
+            context.metadata.get(
+                "completed_stages",
+                [],
+            )
         ),
         "metrics": context.metrics,
         "metadata": context.metadata,
         "artifacts": {
             key: str(value)
-            for key, value in context.artifacts.items()
+            for key, value
+            in context.artifacts.items()
         },
     }
 
@@ -198,7 +229,9 @@ def log_context_to_mlflow(
     context: ExperimentContext,
 ) -> None:
     if context.metrics:
-        mlflow.log_metrics(context.metrics)
+        mlflow.log_metrics(
+            context.metrics
+        )
 
     for artifact_path, directory in (
         context.artifacts.items()
@@ -218,7 +251,9 @@ async def execute_experiment_run(
     started_monotonic = time.perf_counter()
 
     run.status = "running"
-    run.started_at = datetime.now(timezone.utc)
+    run.started_at = datetime.now(
+        timezone.utc
+    )
     run.finished_at = None
     run.duration_ms = None
     run.error_message = None
@@ -236,11 +271,19 @@ async def execute_experiment_run(
         )
 
         tags = {
-            "project": "TFM-rag-evaluation-platform",
+            "project": (
+                "TFM-rag-evaluation-platform"
+            ),
             "run_type": "experiment",
-            "environment": settings.environment,
-            "experiment_id": str(experiment.id),
-            "experiment_version_id": str(version.id),
+            "environment": (
+                settings.environment
+            ),
+            "experiment_id": str(
+                experiment.id
+            ),
+            "experiment_version_id": str(
+                version.id
+            ),
             "experiment_version": str(
                 version.version_number
             ),
@@ -248,9 +291,17 @@ async def execute_experiment_run(
                 version.configuration_hash
             ),
             "source_template_key": (
-                version.source_template_key or ""
+                version.source_template_key
+                or ""
             ),
-            "git_commit": version.git_commit or "",
+            "git_commit": (
+                version.git_commit or ""
+            ),
+            "dataset_id": (
+                str(experiment.dataset_id)
+                if experiment.dataset_id
+                else ""
+            ),
         }
 
         run_name = (
@@ -274,7 +325,9 @@ async def execute_experiment_run(
             )
 
             if parameters:
-                mlflow.log_params(parameters)
+                mlflow.log_params(
+                    parameters
+                )
 
             with tempfile.TemporaryDirectory() as temp:
                 context = ExperimentContext(

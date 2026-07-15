@@ -27,6 +27,15 @@ class VectorStoreProvider(ABC):
     ) -> None:
         raise NotImplementedError
 
+    @abstractmethod
+    def query(
+        self,
+        collection_name: str,
+        query_embeddings: list[list[float]],
+        top_k: int,
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+
 
 class ChromaVectorStoreProvider(VectorStoreProvider):
     def __init__(self) -> None:
@@ -42,7 +51,7 @@ class ChromaVectorStoreProvider(VectorStoreProvider):
     ) -> Collection:
         try:
             self.client.delete_collection(
-                name=collection_name
+                name=collection_name,
             )
         except Exception:
             pass
@@ -65,6 +74,26 @@ class ChromaVectorStoreProvider(VectorStoreProvider):
             documents=documents,
             embeddings=embeddings,
             metadatas=metadatas,
+        )
+
+    def query(
+        self,
+        collection_name: str,
+        query_embeddings: list[list[float]],
+        top_k: int,
+    ) -> dict[str, Any]:
+        collection = self.client.get_collection(
+            name=collection_name,
+        )
+
+        return collection.query(
+            query_embeddings=query_embeddings,
+            n_results=top_k,
+            include=[
+                "documents",
+                "metadatas",
+                "distances",
+            ],
         )
 
 

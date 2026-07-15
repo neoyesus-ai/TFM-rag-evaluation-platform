@@ -5,6 +5,9 @@ from app.experiment.stages.indexing import IndexingStage
 from app.experiment.stages.load_documents import (
     LoadDocumentsStage,
 )
+from app.experiment.stages.retrieval import (
+    RetrievalStage,
+)
 
 __all__ = [
     "ExperimentStage",
@@ -12,4 +15,5 @@ __all__ = [
     "ChunkingStage",
     "EmbeddingStage",
     "IndexingStage",
+    "RetrievalStage",
 ]
