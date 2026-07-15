@@ -1,5 +1,4 @@
 import json
-import statistics
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -7,13 +6,15 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.experiment.chunking import TextChunk, create_chunks
-from app.experiment.document_loader import load_text_document
-from app.models.document import Document
+from app.experiment.context import ExperimentContext
+from app.experiment.stages import (
+    ChunkingStage,
+    ExperimentStage,
+    LoadDocumentsStage,
+)
 from app.models.experiment import (
     Experiment,
     ExperimentRun,
@@ -49,82 +50,142 @@ def flatten_configuration(
 
 
 def create_configuration_artifact(
-    experiment: Experiment,
-    version: ExperimentVersion,
-) -> dict[str, Any]:
-    return {
+    context: ExperimentContext,
+) -> Path:
+    directory = (
+        context.working_directory / "configuration"
+    )
+    directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    path = (
+        directory / "resolved-configuration.json"
+    )
+
+    payload = {
         "experiment": {
-            "id": str(experiment.id),
-            "name": experiment.name,
-            "description": experiment.description,
-            "corpus_id": str(experiment.corpus_id),
+            "id": str(context.experiment.id),
+            "name": context.experiment.name,
+            "description": (
+                context.experiment.description
+            ),
+            "corpus_id": str(
+                context.experiment.corpus_id
+            ),
         },
         "version": {
-            "id": str(version.id),
-            "number": version.version_number,
-            "schema_version": version.schema_version,
-            "configuration_hash": version.configuration_hash,
-            "source_template_key": version.source_template_key,
-            "git_commit": version.git_commit,
+            "id": str(context.version.id),
+            "number": (
+                context.version.version_number
+            ),
+            "schema_version": (
+                context.version.schema_version
+            ),
+            "configuration_hash": (
+                context.version.configuration_hash
+            ),
+            "source_template_key": (
+                context.version.source_template_key
+            ),
+            "git_commit": (
+                context.version.git_commit
+            ),
         },
-        "configuration": version.configuration,
+        "configuration": (
+            context.version.configuration
+        ),
     }
 
-
-async def load_corpus_documents(
-    session: AsyncSession,
-    corpus_id: Any,
-) -> list[Document]:
-    result = await session.execute(
-        select(Document)
-        .where(Document.corpus_id == corpus_id)
-        .order_by(Document.created_at.asc())
-    )
-
-    return list(result.scalars().all())
-
-
-def serialize_chunks(chunks: list[TextChunk]) -> str:
-    return "\n".join(
+    path.write_text(
         json.dumps(
-            {
-                "chunk_id": chunk.chunk_id,
-                "document_id": chunk.document_id,
-                "filename": chunk.filename,
-                "position": chunk.position,
-                "character_count": chunk.character_count,
-                "text": chunk.text,
-            },
+            payload,
             ensure_ascii=False,
-        )
-        for chunk in chunks
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
+    context.artifacts["configuration"] = directory
 
-def build_chunking_summary(
-    documents: list[Document],
-    chunks: list[TextChunk],
-    character_count: int,
-    duration_ms: int,
-) -> dict[str, Any]:
-    chunk_sizes = [
-        chunk.character_count
-        for chunk in chunks
+    return path
+
+
+def build_pipeline(
+    session: AsyncSession,
+) -> list[ExperimentStage]:
+    return [
+        LoadDocumentsStage(session=session),
+        ChunkingStage(),
     ]
 
-    return {
-        "document_count": len(documents),
-        "character_count": character_count,
-        "chunk_count": len(chunks),
-        "mean_chunk_size": (
-            statistics.mean(chunk_sizes)
-            if chunk_sizes
-            else 0
+
+async def execute_pipeline(
+    context: ExperimentContext,
+    pipeline: list[ExperimentStage],
+) -> None:
+    completed_stages: list[dict[str, Any]] = []
+
+    for stage in pipeline:
+        result = await stage.run(context)
+
+        completed_stages.append(
+            {
+                "name": result.name,
+                "duration_ms": result.duration_ms,
+            }
+        )
+
+    context.metadata[
+        "completed_stages"
+    ] = completed_stages
+
+
+def log_context_to_mlflow(
+    context: ExperimentContext,
+) -> None:
+    mlflow.log_metrics(context.metrics)
+
+    for artifact_path, directory in (
+        context.artifacts.items()
+    ):
+        mlflow.log_artifacts(
+            local_dir=str(directory),
+            artifact_path=artifact_path,
+        )
+
+    pipeline_manifest = (
+        context.working_directory
+        / "pipeline-manifest.json"
+    )
+
+    pipeline_manifest.write_text(
+        json.dumps(
+            {
+                "completed_stages": (
+                    context.metadata.get(
+                        "completed_stages",
+                        [],
+                    )
+                ),
+                "metrics": context.metrics,
+                "artifacts": {
+                    key: str(value)
+                    for key, value
+                    in context.artifacts.items()
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
         ),
-        "min_chunk_size": min(chunk_sizes) if chunk_sizes else 0,
-        "max_chunk_size": max(chunk_sizes) if chunk_sizes else 0,
-        "chunking_duration_ms": duration_ms,
-    }
+        encoding="utf-8",
+    )
+
+    mlflow.log_artifact(
+        str(pipeline_manifest),
+        artifact_path="pipeline",
+    )
 
 
 async def execute_experiment_run(
@@ -145,231 +206,96 @@ async def execute_experiment_run(
     await session.refresh(run)
 
     try:
-        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-        mlflow.set_experiment(settings.mlflow_experiment_name)
+        mlflow.set_tracking_uri(
+            settings.mlflow_tracking_uri
+        )
+        mlflow.set_experiment(
+            settings.mlflow_experiment_name
+        )
 
         tags = {
-            "project": "TFM-rag-evaluation-platform",
+            "project": (
+                "TFM-rag-evaluation-platform"
+            ),
             "run_type": "experiment",
             "environment": settings.environment,
             "experiment_id": str(experiment.id),
-            "experiment_version_id": str(version.id),
-            "experiment_version": str(version.version_number),
-            "configuration_hash": version.configuration_hash,
+            "experiment_version_id": str(
+                version.id
+            ),
+            "experiment_version": str(
+                version.version_number
+            ),
+            "configuration_hash": (
+                version.configuration_hash
+            ),
             "source_template_key": (
                 version.source_template_key or ""
             ),
-            "git_commit": version.git_commit or "",
+            "git_commit": (
+                version.git_commit or ""
+            ),
         }
 
-        run_name = (
-            f"{experiment.name}-v{version.version_number}"
-        )
-
         with mlflow.start_run(
-            run_name=run_name,
+            run_name=(
+                f"{experiment.name}"
+                f"-v{version.version_number}"
+            ),
             tags=tags,
         ) as active_mlflow_run:
-            run.mlflow_run_id = active_mlflow_run.info.run_id
+            run.mlflow_run_id = (
+                active_mlflow_run.info.run_id
+            )
 
             await session.commit()
             await session.refresh(run)
 
-            parameters = flatten_configuration(
-                version.configuration
-            )
-            mlflow.log_params(parameters)
-
-            documents = await load_corpus_documents(
-                session=session,
-                corpus_id=experiment.corpus_id,
+            mlflow.log_params(
+                flatten_configuration(
+                    version.configuration
+                )
             )
 
-            if not documents:
-                raise ValueError(
-                    "El corpus no contiene documentos."
+            with tempfile.TemporaryDirectory() as temp:
+                context = ExperimentContext(
+                    experiment=experiment,
+                    version=version,
+                    run=run,
+                    working_directory=Path(temp),
                 )
 
-            chunking_configuration = (
-                version.configuration["chunking"]
-            )
-
-            chunking_started = time.perf_counter()
-
-            chunks: list[TextChunk] = []
-            documents_manifest: list[dict[str, Any]] = []
-            total_character_count = 0
-
-            for document in documents:
-                loaded_document = load_text_document(document)
-
-                total_character_count += len(
-                    loaded_document.text
+                create_configuration_artifact(
+                    context
                 )
 
-                document_chunks = create_chunks(
-                    text=loaded_document.text,
-                    document_id=loaded_document.document_id,
-                    filename=loaded_document.filename,
-                    strategy=chunking_configuration["strategy"],
-                    chunk_size=chunking_configuration["chunk_size"],
-                    chunk_overlap=chunking_configuration[
-                        "chunk_overlap"
-                    ],
+                pipeline = build_pipeline(
+                    session=session
                 )
 
-                chunks.extend(document_chunks)
-
-                documents_manifest.append(
-                    {
-                        "document_id": loaded_document.document_id,
-                        "filename": loaded_document.filename,
-                        "content_type": loaded_document.content_type,
-                        "character_count": len(
-                            loaded_document.text
-                        ),
-                        "chunk_count": len(document_chunks),
-                    }
+                await execute_pipeline(
+                    context=context,
+                    pipeline=pipeline,
                 )
 
-            chunking_duration_ms = int(
-                (
-                    time.perf_counter()
-                    - chunking_started
-                )
-                * 1000
-            )
-
-            summary = build_chunking_summary(
-                documents=documents,
-                chunks=chunks,
-                character_count=total_character_count,
-                duration_ms=chunking_duration_ms,
-            )
-
-            mlflow.log_metrics(
-                {
-                    "document_count": float(
-                        summary["document_count"]
-                    ),
-                    "character_count": float(
-                        summary["character_count"]
-                    ),
-                    "chunk_count": float(
-                        summary["chunk_count"]
-                    ),
-                    "mean_chunk_size": float(
-                        summary["mean_chunk_size"]
-                    ),
-                    "min_chunk_size": float(
-                        summary["min_chunk_size"]
-                    ),
-                    "max_chunk_size": float(
-                        summary["max_chunk_size"]
-                    ),
-                    "chunking_duration_ms": float(
-                        summary["chunking_duration_ms"]
-                    ),
-                }
-            )
-
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temporary_directory = Path(temp_dir)
-
-                configuration_directory = (
-                    temporary_directory / "configuration"
-                )
-                input_directory = (
-                    temporary_directory / "input"
-                )
-                processing_directory = (
-                    temporary_directory / "processing"
+                context.metrics[
+                    "runner_total_ms"
+                ] = float(
+                    int(
+                        (
+                            time.perf_counter()
+                            - started_monotonic
+                        )
+                        * 1000
+                    )
                 )
 
-                configuration_directory.mkdir()
-                input_directory.mkdir()
-                processing_directory.mkdir()
-
-                configuration_path = (
-                    configuration_directory
-                    / "resolved-configuration.json"
-                )
-                manifest_path = (
-                    input_directory
-                    / "documents-manifest.json"
-                )
-                chunks_path = (
-                    processing_directory
-                    / "chunks.jsonl"
-                )
-                summary_path = (
-                    processing_directory
-                    / "chunking-summary.json"
-                )
-
-                configuration_path.write_text(
-                    json.dumps(
-                        create_configuration_artifact(
-                            experiment=experiment,
-                            version=version,
-                        ),
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-
-                manifest_path.write_text(
-                    json.dumps(
-                        documents_manifest,
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-
-                chunks_path.write_text(
-                    serialize_chunks(chunks),
-                    encoding="utf-8",
-                )
-
-                summary_path.write_text(
-                    json.dumps(
-                        summary,
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-
-                mlflow.log_artifacts(
-                    str(configuration_directory),
-                    artifact_path="configuration",
-                )
-                mlflow.log_artifacts(
-                    str(input_directory),
-                    artifact_path="input",
-                )
-                mlflow.log_artifacts(
-                    str(processing_directory),
-                    artifact_path="processing",
-                )
-
-            elapsed_ms = int(
-                (
-                    time.perf_counter()
-                    - started_monotonic
-                )
-                * 1000
-            )
-
-            mlflow.log_metric(
-                key="runner_total_ms",
-                value=elapsed_ms,
-            )
+                log_context_to_mlflow(context)
 
         run.status = "completed"
-        run.finished_at = datetime.now(timezone.utc)
+        run.finished_at = datetime.now(
+            timezone.utc
+        )
         run.duration_ms = int(
             (
                 time.perf_counter()
@@ -381,7 +307,9 @@ async def execute_experiment_run(
 
     except Exception as exc:
         run.status = "failed"
-        run.finished_at = datetime.now(timezone.utc)
+        run.finished_at = datetime.now(
+            timezone.utc
+        )
         run.duration_ms = int(
             (
                 time.perf_counter()
