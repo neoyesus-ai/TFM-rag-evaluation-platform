@@ -14,6 +14,7 @@ from app.experiment.stages import (
     ChunkingStage,
     EmbeddingStage,
     ExperimentStage,
+    IndexingStage,
     LoadDocumentsStage,
 )
 from app.models.experiment import (
@@ -116,6 +117,7 @@ def build_pipeline(
         LoadDocumentsStage(session=session),
         ChunkingStage(),
         EmbeddingStage(),
+        IndexingStage(),
     ]
 
 

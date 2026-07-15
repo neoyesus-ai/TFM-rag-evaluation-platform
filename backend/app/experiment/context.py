@@ -32,6 +32,8 @@ class ExperimentContext:
         default_factory=list
     )
 
+    vector_collection_name: str | None = None
+
     metrics: dict[str, float] = field(
         default_factory=dict
     )
