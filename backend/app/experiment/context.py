@@ -44,6 +44,14 @@ class ExperimentContext:
         default_factory=list,
     )
 
+    generation_results: list[dict[str, Any]] = field(
+        default_factory=list,
+    )
+
+    evaluation_results: list[dict[str, Any]] = field(
+        default_factory=list,
+    )
+
     vector_collection_name: str | None = None
 
     metrics: dict[str, float] = field(
