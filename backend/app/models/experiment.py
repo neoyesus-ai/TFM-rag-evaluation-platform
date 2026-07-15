@@ -40,8 +40,21 @@ class Experiment(Base):
 
     corpus_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("corpora.id", ondelete="RESTRICT"),
+        ForeignKey(
+            "corpora.id",
+            ondelete="RESTRICT",
+        ),
         nullable=False,
+        index=True,
+    )
+
+    dataset_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "evaluation_datasets.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
         index=True,
     )
 
@@ -91,7 +104,10 @@ class ExperimentVersion(Base):
 
     experiment_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("experiments.id", ondelete="CASCADE"),
+        ForeignKey(
+            "experiments.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -158,7 +174,10 @@ class ExperimentRun(Base):
 
     experiment_version_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("experiment_versions.id", ondelete="CASCADE"),
+        ForeignKey(
+            "experiment_versions.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
