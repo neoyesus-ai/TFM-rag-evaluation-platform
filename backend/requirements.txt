@@ -31,3 +31,6 @@ PyYAML==6.0.2
 numpy
 
 alembic==1.18.5
+
+PyJWT
+pwdlib[argon2]

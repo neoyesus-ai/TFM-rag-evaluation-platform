@@ -225,6 +225,16 @@ services:
       MLFLOW_EXPERIMENT_NAME: tfm-rag-experiments
 
       MAX_UPLOAD_SIZE_MB: 25
+
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+
+      AUTH_ADMIN_USERNAME: ${AUTH_ADMIN_USERNAME}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD}
+      AUTH_ADMIN_FULL_NAME: ${AUTH_ADMIN_FULL_NAME}
+      AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
+
     volumes:
       - ./experiments/templates:/app/experiment_templates:ro
     ports:

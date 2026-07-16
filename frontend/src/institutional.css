@@ -1,0 +1,488 @@
+.application-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: #555b75;
+  background: #f4f6fa;
+  font-weight: 700;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.35fr)
+    minmax(420px, 0.65fr);
+  background: #f4f6fa;
+}
+
+.login-presentation {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(34px, 5vw, 72px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #ffffff;
+  background:
+    radial-gradient(
+      circle at 15% 15%,
+      rgba(255, 255, 255, 0.2),
+      transparent 28rem
+    ),
+    linear-gradient(
+      145deg,
+      #342464 0%,
+      #40347c 45%,
+      #22254f 100%
+    );
+}
+
+.login-presentation::after {
+  content: "";
+  position: absolute;
+  right: -150px;
+  bottom: -210px;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  border: 80px solid rgba(255, 255, 255, 0.05);
+}
+
+.institution-logo-panel {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  padding: 16px 22px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow:
+    0 20px 50px
+    rgba(16, 17, 47, 0.2);
+}
+
+.login-logo {
+  display: block;
+  width: min(250px, 46vw);
+  height: auto;
+}
+
+.login-project-copy {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1050px;
+}
+
+.login-eyebrow {
+  display: block;
+  margin-bottom: 16px;
+  color: #d9d5ff;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.login-project-copy h1 {
+  margin: 0;
+  max-width: 1050px;
+  font-size: clamp(
+    2rem,
+    3.65vw,
+    4rem
+  );
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+}
+
+.login-project-title {
+  display: grid;
+  gap: 10px;
+}
+
+.login-project-title .title-main-line {
+  display: block;
+  width: 100%;
+  color: #ffffff;
+  font-size: inherit;
+  font-weight: 800;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.login-project-title .title-rag-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 4px;
+  color: #ffffff;
+}
+
+.login-project-title .title-rag-line strong {
+  color: #ffffff;
+  font: inherit;
+  font-weight: 800;
+}
+
+.login-project-title .title-rag-line small {
+  color: #d8d5ff;
+  font-size: 0.43em;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.academic-data {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.academic-data div {
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.academic-data span,
+.academic-data strong {
+  display: block;
+}
+
+.academic-data span {
+  margin-bottom: 6px;
+  color: #c9c5ef;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.academic-data strong {
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.login-access {
+  padding: 36px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(
+      circle at top right,
+      #e9e8fa,
+      transparent 24rem
+    ),
+    #f6f7fb;
+}
+
+.login-card {
+  width: min(100%, 450px);
+  padding: 38px;
+  border: 1px solid rgba(105, 109, 170, 0.15);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 30px 70px
+    rgba(45, 48, 92, 0.11);
+}
+
+.login-card-kicker {
+  color: #6b61c7;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.login-card-heading h2 {
+  margin: 8px 0 10px;
+  color: #282d59;
+  font-size: 2rem;
+}
+
+.login-card-heading p {
+  margin: 0;
+  color: #7b8095;
+  line-height: 1.55;
+}
+
+.login-form {
+  margin-top: 30px;
+  display: grid;
+  gap: 18px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 8px;
+  color: #51566f;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.login-form input {
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid #dcdfea;
+  border-radius: 11px;
+  color: #30354d;
+  background: #ffffff;
+  outline: none;
+}
+
+.login-form input:focus {
+  border-color: #7770ce;
+  box-shadow:
+    0 0 0 4px
+    rgba(112, 103, 200, 0.1);
+}
+
+.login-error {
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #963d49;
+  background: #fbe9eb;
+  font-size: 0.82rem;
+}
+
+.login-submit {
+  height: 48px;
+  border: 0;
+  border-radius: 11px;
+  color: #ffffff;
+  background:
+    linear-gradient(
+      135deg,
+      #5f57bc,
+      #3d376f
+    );
+  font-weight: 800;
+  box-shadow:
+    0 13px 24px
+    rgba(76, 68, 154, 0.22);
+}
+
+.login-submit:disabled {
+  opacity: 0.6;
+}
+
+.local-login-warning {
+  margin: 20px 0 0;
+  color: #9599aa;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.authenticated-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.authenticated-content {
+  flex: 1;
+}
+
+.institutional-header {
+  position: relative;
+  z-index: 20;
+  min-height: 84px;
+  padding: 13px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  border-bottom: 1px solid #e5e6ef;
+  background: #ffffff;
+  box-shadow:
+    0 5px 22px
+    rgba(42, 47, 90, 0.06);
+}
+
+.institutional-brand {
+  display: flex;
+  align-items: center;
+  gap: 19px;
+}
+
+.institutional-brand img {
+  width: 145px;
+  height: auto;
+}
+
+.institutional-brand span,
+.institutional-brand strong {
+  display: block;
+}
+
+.institutional-brand span {
+  margin-bottom: 4px;
+  color: #777b93;
+  font-size: 0.72rem;
+}
+
+.institutional-brand strong {
+  color: #292e59;
+  font-size: 1rem;
+}
+
+.institutional-user {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.institutional-user div {
+  text-align: right;
+}
+
+.institutional-user strong,
+.institutional-user span {
+  display: block;
+}
+
+.institutional-user strong {
+  color: #353a58;
+  font-size: 0.82rem;
+}
+
+.institutional-user span {
+  margin-top: 3px;
+  color: #8d91a5;
+  font-size: 0.72rem;
+}
+
+.institutional-user button {
+  padding: 9px 13px;
+  border: 1px solid #d9dbe8;
+  border-radius: 9px;
+  color: #525775;
+  background: #ffffff;
+  font-weight: 750;
+}
+
+.institutional-footer {
+  min-height: 78px;
+  padding: 18px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  color: #c4c6dc;
+  background: #24264e;
+}
+
+.institutional-footer div {
+  display: grid;
+  gap: 4px;
+}
+
+.institutional-footer div:last-child {
+  text-align: right;
+}
+
+.institutional-footer strong {
+  color: #ffffff;
+  font-size: 0.82rem;
+}
+
+.institutional-footer span {
+  font-size: 0.72rem;
+}
+
+@media (max-width: 1250px) {
+  .login-project-copy h1 {
+    font-size: clamp(
+      1.9rem,
+      3.4vw,
+      3.5rem
+    );
+  }
+
+  .login-project-title .title-rag-line small {
+    font-size: 0.4em;
+  }
+}
+
+@media (max-width: 1050px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-presentation {
+    min-height: 680px;
+  }
+
+  .academic-data {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .login-project-copy h1 {
+    font-size: clamp(
+      2rem,
+      6vw,
+      3.6rem
+    );
+  }
+}
+
+@media (max-width: 700px) {
+  .login-presentation,
+  .login-access {
+    padding: 30px 20px;
+  }
+
+  .login-card {
+    padding: 27px 22px;
+  }
+
+  .login-project-copy h1 {
+    font-size: clamp(
+      1.75rem,
+      8.5vw,
+      2.7rem
+    );
+  }
+
+  .login-project-title .title-rag-line {
+    display: block;
+  }
+
+  .login-project-title .title-rag-line strong,
+  .login-project-title .title-rag-line small {
+    display: block;
+  }
+
+  .login-project-title .title-rag-line small {
+    margin-top: 7px;
+    font-size: 0.47em;
+  }
+
+  .institutional-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .institutional-user {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .institutional-user div {
+    text-align: left;
+  }
+
+  .institutional-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .institutional-footer div:last-child {
+    text-align: left;
+  }
+}

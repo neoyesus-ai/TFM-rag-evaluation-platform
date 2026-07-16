@@ -1,4 +1,5 @@
 import json
+import logging
 import tempfile
 import time
 from datetime import datetime, timezone
@@ -8,6 +9,9 @@ from typing import Any
 import mlflow
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analytics.service import (
+    persist_experiment_analytics,
+)
 from app.core.config import settings
 from app.experiment.context import ExperimentContext
 from app.experiment.stages import (
@@ -25,6 +29,9 @@ from app.models.experiment import (
     ExperimentRun,
     ExperimentVersion,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def flatten_configuration(
@@ -102,7 +109,9 @@ def create_configuration_artifact(
             ),
         },
         "version": {
-            "id": str(context.version.id),
+            "id": str(
+                context.version.id
+            ),
             "number": (
                 context.version.version_number
             ),
@@ -145,13 +154,13 @@ def build_pipeline(
 ) -> list[ExperimentStage]:
     return [
         LoadDocumentsStage(
-            session=session
+            session=session,
         ),
         ChunkingStage(),
         EmbeddingStage(),
         IndexingStage(),
         RetrievalStage(
-            session=session
+            session=session,
         ),
         GenerationStage(),
         EvaluationStage(),
@@ -268,6 +277,40 @@ def log_context_to_mlflow(
         )
 
 
+async def persist_analytics_safely(
+    session: AsyncSession,
+    context: ExperimentContext,
+) -> None:
+    """
+    Persistir Analytics sin invalidar una ejecución RAG correcta.
+
+    La ejecución principal ya debe estar confirmada en PostgreSQL antes
+    de llamar a esta función. Si la capa analítica falla, se revierte
+    únicamente su transacción y se conserva el run completado.
+    """
+
+    try:
+        await persist_experiment_analytics(
+            session=session,
+            context=context,
+        )
+
+        await session.commit()
+
+        logger.info(
+            "Analytics persistido para el run %s.",
+            context.run.id,
+        )
+    except Exception:
+        await session.rollback()
+
+        logger.exception(
+            "No se pudo persistir Analytics "
+            "para el run %s.",
+            context.run.id,
+        )
+
+
 async def execute_experiment_run(
     session: AsyncSession,
     experiment: Experiment,
@@ -277,6 +320,10 @@ async def execute_experiment_run(
     started_monotonic = (
         time.perf_counter()
     )
+
+    completed_context: (
+        ExperimentContext | None
+    ) = None
 
     run.status = "running"
     run.started_at = datetime.now(
@@ -361,15 +408,13 @@ async def execute_experiment_run(
                 )
 
             with tempfile.TemporaryDirectory() as temp:
-                context = (
-                    ExperimentContext(
-                        experiment=experiment,
-                        version=version,
-                        run=run,
-                        working_directory=(
-                            Path(temp)
-                        ),
-                    )
+                context = ExperimentContext(
+                    experiment=experiment,
+                    version=version,
+                    run=run,
+                    working_directory=Path(
+                        temp
+                    ),
                 )
 
                 create_configuration_artifact(
@@ -405,6 +450,8 @@ async def execute_experiment_run(
                     context
                 )
 
+                completed_context = context
+
         run.status = "completed"
         run.finished_at = datetime.now(
             timezone.utc
@@ -418,7 +465,12 @@ async def execute_experiment_run(
         )
         run.error_message = None
 
+        await session.commit()
+        await session.refresh(run)
+
     except Exception as exc:
+        await session.rollback()
+
         run.status = "failed"
         run.finished_at = datetime.now(
             timezone.utc
@@ -434,7 +486,23 @@ async def execute_experiment_run(
             f"{type(exc).__name__}: {exc}"
         )[:4000]
 
-    await session.commit()
-    await session.refresh(run)
+        await session.commit()
+        await session.refresh(run)
+
+        logger.exception(
+            "La ejecución experimental %s "
+            "ha finalizado con error.",
+            run.id,
+        )
+
+        return run
+
+    if completed_context is not None:
+        await persist_analytics_safely(
+            session=session,
+            context=completed_context,
+        )
+
+        await session.refresh(run)
 
     return run

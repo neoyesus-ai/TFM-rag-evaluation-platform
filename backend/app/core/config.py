@@ -30,6 +30,15 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 25
 
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 480
+
+    auth_admin_username: str = ""
+    auth_admin_password: str = ""
+    auth_admin_full_name: str = "Administrador"
+    auth_admin_email: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
