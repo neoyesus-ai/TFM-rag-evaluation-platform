@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import AnalyticsDashboard from "./components/analytics/AnalyticsDashboard";
+import DashboardPage from "./pages/DashboardPage";
 import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
 import ExperimentTemplatesPage from "./components/experiments/ExperimentTemplatesPage";
 
@@ -764,272 +765,43 @@ function App() {
 
   function renderDashboard() {
     return (
-      <>
-        <header className="page-header">
-          <div>
-            <span className="eyebrow">
-              Laboratorio experimental
-            </span>
+      <DashboardPage
+        corpusCount={corpora.length}
+        datasetCount={datasets.length}
+        experimentCount={
+          experiments.length
+        }
+        runCount={runs.length}
+        completedRunCount={
+          completedRuns
+        }
+        failedRunCount={
+          failedRuns
+        }
+        averageDurationMs={
+          averageDuration
+        }
+        latestRuns={latestRuns}
+        systemStatus={
+          systemStatus
+        }
+        loading={loading}
+        onRefresh={() =>
+          void loadOverview()
+        }
+        onOpenRuns={() =>
+          setView("runs")
+        }
+        onOpenRunResults={(
+          runId,
+        ) => {
+          setView("runs");
 
-            <h1>Panel general</h1>
-
-            <p>
-              Estado del pipeline RAG,
-              recursos experimentales y
-              últimas ejecuciones.
-            </p>
-          </div>
-
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() =>
-              void loadOverview()
-            }
-            disabled={loading}
-          >
-            Actualizar
-          </button>
-        </header>
-        <section className="metric-grid">
-          <article className="metric-card">
-            <span>Corpora</span>
-            <strong>{corpora.length}</strong>
-            <small>
-              colecciones documentales
-            </small>
-          </article>
-
-          <article className="metric-card">
-            <span>Datasets</span>
-            <strong>{datasets.length}</strong>
-            <small>
-              conjuntos de evaluación
-            </small>
-          </article>
-
-          <article className="metric-card">
-            <span>Experimentos</span>
-            <strong>
-              {experiments.length}
-            </strong>
-            <small>
-              configuraciones registradas
-            </small>
-          </article>
-
-          <article className="metric-card">
-            <span>Ejecuciones</span>
-            <strong>{runs.length}</strong>
-            <small>
-              {completedRuns} completadas ·{" "}
-              {failedRuns} fallidas
-            </small>
-          </article>
-        </section>
-
-        <section className="content-grid">
-          <article className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>
-                  Últimas ejecuciones
-                </h2>
-                <p>
-                  Actividad reciente del
-                  motor experimental.
-                </p>
-              </div>
-
-              <button
-                className="text-button"
-                type="button"
-                onClick={() =>
-                  setView("runs")
-                }
-              >
-                Ver todas
-              </button>
-            </div>
-
-            <div className="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Estado</th>
-                    <th>Duración</th>
-                    <th>Inicio</th>
-                    <th>Resultados</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {latestRuns.map(
-                    (run) => (
-                      <tr key={run.id}>
-                        <td>
-                          <span
-                            className={`status-badge status-${run.status}`}
-                          >
-                            {statusLabel(
-                              run.status,
-                            )}
-                          </span>
-                        </td>
-
-                        <td>
-                          {formatDuration(
-                            run.duration_ms,
-                          )}
-                        </td>
-
-                        <td>
-                          {formatDate(
-                            run.started_at,
-                          )}
-                        </td>
-
-                        <td>
-                          {run.status ===
-                          "completed" ? (
-                            <button
-                              className="table-action-button"
-                              type="button"
-                              onClick={() => {
-                                setView("runs");
-                                void openRunResults(
-                                  run.id,
-                                );
-                              }}
-                            >
-                              Ver resultados
-                            </button>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    ),
-                  )}
-
-                  {latestRuns.length ===
-                    0 && (
-                    <tr>
-                      <td
-                        colSpan={4}
-                        className="empty-cell"
-                      >
-                        Todavía no hay
-                        ejecuciones.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>
-                  Estado de servicios
-                </h2>
-                <p>
-                  Disponibilidad de la
-                  infraestructura.
-                </p>
-              </div>
-            </div>
-
-            <div className="service-list">
-              {Object.entries(
-                systemStatus?.services ??
-                  {},
-              ).map(
-                ([name, service]) => (
-                  <div
-                    className="service-row"
-                    key={name}
-                  >
-                    <div>
-                      <strong>{name}</strong>
-                      <small>
-                        {service.detail ||
-                          "Sin incidencias"}
-                      </small>
-                    </div>
-
-                    <span
-                      className={`status-badge status-${service.status}`}
-                    >
-                      {statusLabel(
-                        service.status,
-                      )}
-                    </span>
-                  </div>
-                ),
-              )}
-            </div>
-          </article>
-        </section>
-
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>
-                Indicadores operativos
-              </h2>
-              <p>
-                Resumen de rendimiento de
-                las ejecuciones.
-              </p>
-            </div>
-          </div>
-
-          <div className="compact-metrics">
-            <div>
-              <span>Tasa de éxito</span>
-              <strong>
-                {runs.length > 0
-                  ? `${Math.round(
-                      (completedRuns /
-                        runs.length) *
-                        100,
-                    )} %`
-                  : "—"}
-              </strong>
-            </div>
-
-            <div>
-              <span>Duración media</span>
-              <strong>
-                {formatDuration(
-                  averageDuration,
-                )}
-              </strong>
-            </div>
-
-            <div>
-              <span>
-                Servicios disponibles
-              </span>
-              <strong>
-                {
-                  Object.values(
-                    systemStatus?.services ??
-                      {},
-                  ).filter(
-                    (service) =>
-                      service.status ===
-                      "ok",
-                  ).length
-                }
-              </strong>
-            </div>
-          </div>
-        </section>
-      </>
+          void openRunResults(
+            runId,
+          );
+        }}
+      />
     );
   }
 
