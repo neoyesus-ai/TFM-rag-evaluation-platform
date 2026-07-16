@@ -8,11 +8,13 @@ import {
 
 import AnalyticsDashboard from "./components/analytics/AnalyticsDashboard";
 import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
+import ExperimentTemplatesPage from "./components/experiments/ExperimentTemplatesPage";
 
 type View =
   | "dashboard"
   | "datasets"
   | "experiments"
+  | "templates"
   | "runs"
   | "analytics"
   | "services";
@@ -1699,6 +1701,10 @@ function App() {
     );
   }
 
+  function renderTemplates() {
+    return <ExperimentTemplatesPage />;
+  }
+
   function renderRunResults() {
     if (resultsLoading) {
       return (
@@ -2317,6 +2323,9 @@ function App() {
       case "experiments":
         return renderExperiments();
 
+      case "templates":
+        return renderTemplates();
+
       case "runs":
         return renderRuns();
 
@@ -2388,6 +2397,20 @@ function App() {
             }
           >
             Experimentos
+          </button>
+
+          <button
+            type="button"
+            className={
+              view === "templates"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setView("templates")
+            }
+          >
+            Plantillas
           </button>
 
           <button
