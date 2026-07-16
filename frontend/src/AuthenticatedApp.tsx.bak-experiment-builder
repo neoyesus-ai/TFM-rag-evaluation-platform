@@ -7,7 +7,6 @@ import {
 } from "react";
 
 import AnalyticsDashboard from "./components/analytics/AnalyticsDashboard";
-import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
 
 type View =
   | "dashboard"
@@ -409,13 +408,6 @@ function App() {
   ] = useState<ExperimentDetail | null>(
     null,
   );
-
-  const [
-    experimentWorkspace,
-    setExperimentWorkspace,
-  ] = useState<
-    "list" | "builder"
-  >("list");
 
   const [
     selectedRunResults,
@@ -1313,26 +1305,6 @@ function App() {
   }
 
   function renderExperiments() {
-    if (
-      experimentWorkspace ===
-      "builder"
-    ) {
-      return (
-        <ExperimentBuilderPage
-          onCreated={async () => {
-            await loadOverview();
-          }}
-          onOpenRuns={() => {
-            setExperimentWorkspace(
-              "list",
-            );
-
-            setView("runs");
-          }}
-        />
-      );
-    }
-
     return (
       <>
         <header className="page-header">
@@ -1344,107 +1316,14 @@ function App() {
             <h1>Experimentos</h1>
 
             <p>
-              Crea configuraciones
-              reproducibles, consulta sus
+              Selecciona datasets, consulta
               versiones y ejecuta el pipeline
               completo.
             </p>
           </div>
-
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => {
-              setSelectedExperiment(
-                null,
-              );
-
-              setExperimentWorkspace(
-                "builder",
-              );
-            }}
-          >
-            Nuevo experimento
-          </button>
         </header>
 
-        <section className="experiment-management-summary">
-          <article>
-            <span>
-              Experimentos
-            </span>
-
-            <strong>
-              {experiments.length}
-            </strong>
-
-            <small>
-              configuraciones registradas
-            </small>
-          </article>
-
-          <article>
-            <span>
-              Versiones
-            </span>
-
-            <strong>
-              {selectedExperiment
-                ? selectedExperiment
-                    .versions.length
-                : "—"}
-            </strong>
-
-            <small>
-              del experimento seleccionado
-            </small>
-          </article>
-
-          <article>
-            <span>
-              Corpora
-            </span>
-
-            <strong>
-              {corpora.length}
-            </strong>
-
-            <small>
-              disponibles
-            </small>
-          </article>
-
-          <article>
-            <span>
-              Datasets
-            </span>
-
-            <strong>
-              {datasets.length}
-            </strong>
-
-            <small>
-              conjuntos de evaluación
-            </small>
-          </article>
-        </section>
-
         <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>
-                Experimentos registrados
-              </h2>
-
-              <p>
-                Selecciona un experimento
-                para consultar sus versiones,
-                asignar un dataset o ejecutar
-                una configuración.
-              </p>
-            </div>
-          </div>
-
           <div className="card-list">
             {experiments.map(
               (experiment) => {
@@ -1506,32 +1385,6 @@ function App() {
                 );
               },
             )}
-
-            {experiments.length === 0 && (
-              <div className="experiment-empty-state">
-                <strong>
-                  Todavía no hay experimentos
-                </strong>
-
-                <p>
-                  Utiliza el constructor para
-                  registrar la primera
-                  configuración experimental.
-                </p>
-
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() =>
-                    setExperimentWorkspace(
-                      "builder",
-                    )
-                  }
-                >
-                  Crear primer experimento
-                </button>
-              </div>
-            )}
           </div>
         </section>
 
@@ -1539,10 +1392,6 @@ function App() {
           <section className="panel">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">
-                  Detalle experimental
-                </span>
-
                 <h2>
                   {selectedExperiment.name}
                 </h2>
@@ -1552,16 +1401,7 @@ function App() {
                     selectedExperiment
                       .versions.length
                   }{" "}
-                  versión
-                  {selectedExperiment
-                    .versions.length === 1
-                    ? ""
-                    : "es"}{" "}
-                  disponible
-                  {selectedExperiment
-                    .versions.length === 1
-                    ? ""
-                    : "s"}.
+                  versiones disponibles.
                 </p>
               </div>
 
@@ -1584,8 +1424,7 @@ function App() {
 
                 <select
                   value={
-                    selectedExperiment
-                      .dataset_id ??
+                    selectedExperiment.dataset_id ??
                     ""
                   }
                   onChange={(event) => {
@@ -1610,14 +1449,8 @@ function App() {
                         key={dataset.id}
                         value={dataset.id}
                       >
-                        {dataset.name}
-                        {" · v"}
+                        {dataset.name} · v
                         {dataset.version}
-                        {" · "}
-                        {
-                          dataset.question_count
-                        }
-                        {" preguntas"}
                       </option>
                     ),
                   )}
@@ -1657,20 +1490,6 @@ function App() {
                           …
                         </code>
                       </p>
-
-                      <div className="experiment-version-meta">
-                        <span>
-                          Plantilla:{" "}
-                          {version.source_template_key ??
-                            "manual"}
-                        </span>
-
-                        <span>
-                          Commit:{" "}
-                          {version.git_commit ??
-                            "no asociado"}
-                        </span>
-                      </div>
                     </div>
 
                     <button
@@ -1678,8 +1497,7 @@ function App() {
                       type="button"
                       disabled={
                         actionLoading ||
-                        !selectedExperiment
-                          .dataset_id
+                        !selectedExperiment.dataset_id
                       }
                       onClick={() =>
                         void executeVersion(
