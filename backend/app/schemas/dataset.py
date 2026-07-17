@@ -2,7 +2,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
 
 class EvaluationQuestionCreate(BaseModel):
@@ -26,6 +31,39 @@ class EvaluationQuestionCreate(BaseModel):
         default=None,
         ge=0,
     )
+
+
+class EvaluationQuestionUpdate(BaseModel):
+    question: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=10000,
+    )
+
+    expected_answer: str | None = Field(
+        default=None,
+        max_length=20000,
+    )
+
+    expected_contexts: list[str] | None = None
+
+    metadata: dict[str, Any] | None = None
+
+    order_index: int | None = Field(
+        default=None,
+        ge=0,
+    )
+
+    @model_validator(mode="after")
+    def validate_update_payload(
+        self,
+    ) -> "EvaluationQuestionUpdate":
+        if not self.model_fields_set:
+            raise ValueError(
+                "Debe indicarse al menos un campo para actualizar."
+            )
+
+        return self
 
 
 class EvaluationQuestionResponse(BaseModel):
@@ -84,7 +122,9 @@ class EvaluationDatasetCreate(BaseModel):
             if question.order_index is not None
         ]
 
-        if len(explicit_orders) != len(set(explicit_orders)):
+        if len(explicit_orders) != len(
+            set(explicit_orders)
+        ):
             raise ValueError(
                 "Los valores order_index no pueden repetirse."
             )
@@ -92,8 +132,44 @@ class EvaluationDatasetCreate(BaseModel):
         return self
 
 
+class EvaluationDatasetUpdate(BaseModel):
+    name: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=200,
+    )
+
+    description: str | None = Field(
+        default=None,
+        max_length=5000,
+    )
+
+    version: int | None = Field(
+        default=None,
+        ge=1,
+    )
+
+    status: str | None = Field(
+        default=None,
+        pattern="^(draft|ready|archived)$",
+    )
+
+    @model_validator(mode="after")
+    def validate_update_payload(
+        self,
+    ) -> "EvaluationDatasetUpdate":
+        if not self.model_fields_set:
+            raise ValueError(
+                "Debe indicarse al menos un campo para actualizar."
+            )
+
+        return self
+
+
 class EvaluationDatasetSummaryResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
     id: uuid.UUID
     name: str
@@ -106,7 +182,9 @@ class EvaluationDatasetSummaryResponse(BaseModel):
 
 
 class EvaluationDatasetResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
     id: uuid.UUID
     name: str
@@ -115,7 +193,9 @@ class EvaluationDatasetResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-    questions: list[EvaluationQuestionResponse]
+    questions: list[
+        EvaluationQuestionResponse
+    ]
 
 
 class EvaluationDatasetStatusUpdate(BaseModel):

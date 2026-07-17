@@ -16,6 +16,8 @@ export type DatasetQuestion = {
   expected_contexts: string[] | null;
   metadata: DatasetQuestionMetadata;
   order_index: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type DatasetSummary = {
@@ -48,12 +50,27 @@ export type DatasetQuestionCreate = {
   orderIndex?: number;
 };
 
+export type DatasetQuestionUpdate = {
+  question?: string;
+  expectedAnswer?: string;
+  expectedContexts?: string[];
+  metadata?: DatasetQuestionMetadata;
+  orderIndex?: number;
+};
+
 export type DatasetCreate = {
   name: string;
   description: string;
   version: number;
   status: DatasetStatus;
   questions: DatasetQuestionCreate[];
+};
+
+export type DatasetUpdate = {
+  name?: string;
+  description?: string;
+  version?: number;
+  status?: DatasetStatus;
 };
 
 async function request<T>(
@@ -99,11 +116,26 @@ async function request<T>(
       const payload = JSON.parse(
         responseText,
       ) as {
-        detail?: string;
+        detail?: string | Array<{
+          msg?: string;
+        }>;
       };
 
-      if (payload.detail) {
+      if (
+        typeof payload.detail ===
+        "string"
+      ) {
         message = payload.detail;
+      } else if (
+        Array.isArray(payload.detail)
+      ) {
+        message = payload.detail
+          .map(
+            (item) =>
+              item.msg ??
+              "Error de validación.",
+          )
+          .join(" ");
       }
     } catch {
       // La respuesta no era JSON.
@@ -119,7 +151,21 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
-function serializeQuestion(
+function normalizeContexts(
+  contexts: string[],
+): string[] | null {
+  const normalized = contexts
+    .map((context) =>
+      context.trim(),
+    )
+    .filter(Boolean);
+
+  return normalized.length > 0
+    ? normalized
+    : null;
+}
+
+function serializeQuestionCreate(
   question: DatasetQuestionCreate,
 ) {
   return {
@@ -128,17 +174,102 @@ function serializeQuestion(
       question.expectedAnswer.trim() ||
       null,
     expected_contexts:
-      question.expectedContexts.length > 0
-        ? question.expectedContexts
-            .map((context) =>
-              context.trim(),
-            )
-            .filter(Boolean)
-        : null,
+      normalizeContexts(
+        question.expectedContexts,
+      ),
     metadata: question.metadata,
     order_index:
       question.orderIndex ?? null,
   };
+}
+
+function serializeQuestionUpdate(
+  question: DatasetQuestionUpdate,
+) {
+  const payload: Record<
+    string,
+    unknown
+  > = {};
+
+  if (
+    question.question !== undefined
+  ) {
+    payload.question =
+      question.question.trim();
+  }
+
+  if (
+    question.expectedAnswer !==
+    undefined
+  ) {
+    payload.expected_answer =
+      question.expectedAnswer.trim() ||
+      null;
+  }
+
+  if (
+    question.expectedContexts !==
+    undefined
+  ) {
+    payload.expected_contexts =
+      normalizeContexts(
+        question.expectedContexts,
+      );
+  }
+
+  if (
+    question.metadata !== undefined
+  ) {
+    payload.metadata =
+      question.metadata;
+  }
+
+  if (
+    question.orderIndex !== undefined
+  ) {
+    payload.order_index =
+      question.orderIndex;
+  }
+
+  return payload;
+}
+
+function serializeDatasetUpdate(
+  dataset: DatasetUpdate,
+) {
+  const payload: Record<
+    string,
+    unknown
+  > = {};
+
+  if (dataset.name !== undefined) {
+    payload.name =
+      dataset.name.trim();
+  }
+
+  if (
+    dataset.description !== undefined
+  ) {
+    payload.description =
+      dataset.description.trim() ||
+      null;
+  }
+
+  if (
+    dataset.version !== undefined
+  ) {
+    payload.version =
+      dataset.version;
+  }
+
+  if (
+    dataset.status !== undefined
+  ) {
+    payload.status =
+      dataset.status;
+  }
+
+  return payload;
 }
 
 export async function listDatasets(): Promise<
@@ -173,9 +304,24 @@ export async function createDataset(
         status: payload.status,
         questions:
           payload.questions.map(
-            serializeQuestion,
+            serializeQuestionCreate,
           ),
       }),
+    },
+  );
+}
+
+export async function updateDataset(
+  datasetId: string,
+  payload: DatasetUpdate,
+): Promise<DatasetDetail> {
+  return request<DatasetDetail>(
+    `/datasets/${datasetId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(
+        serializeDatasetUpdate(payload),
+      ),
     },
   );
 }
@@ -189,7 +335,22 @@ export async function addDatasetQuestion(
     {
       method: "POST",
       body: JSON.stringify(
-        serializeQuestion(payload),
+        serializeQuestionCreate(payload),
+      ),
+    },
+  );
+}
+
+export async function updateDatasetQuestion(
+  questionId: string,
+  payload: DatasetQuestionUpdate,
+): Promise<DatasetQuestion> {
+  return request<DatasetQuestion>(
+    `/datasets/questions/${questionId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(
+        serializeQuestionUpdate(payload),
       ),
     },
   );

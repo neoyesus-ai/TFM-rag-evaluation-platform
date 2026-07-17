@@ -1,6 +1,8 @@
 import {
+  useEffect,
   useMemo,
   useState,
+  type FormEvent,
 } from "react";
 
 import type {
@@ -9,8 +11,11 @@ import type {
 
 type DatasetQuestionEditorProps = {
   initialValue?: DatasetQuestionCreate;
+  title?: string;
+  description?: string;
   submitLabel?: string;
   disabled?: boolean;
+  resetAfterSubmit?: boolean;
   onSubmit: (
     value: DatasetQuestionCreate,
   ) => Promise<void> | void;
@@ -24,74 +29,80 @@ const EMPTY_QUESTION: DatasetQuestionCreate = {
   metadata: {},
 };
 
+function metadataText(
+  value: unknown,
+  fallback = "",
+): string {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return fallback;
+  }
+
+  return String(value);
+}
+
+function metadataTags(
+  value: unknown,
+): string {
+  if (!Array.isArray(value)) {
+    return "";
+  }
+
+  return value
+    .map(String)
+    .join(", ");
+}
+
 function DatasetQuestionEditor({
   initialValue = EMPTY_QUESTION,
+  title = "Pregunta y respuesta esperada",
+  description = (
+    "Define el caso que utilizará el " +
+    "pipeline para evaluar la recuperación " +
+    "y la generación."
+  ),
   submitLabel = "Guardar pregunta",
   disabled = false,
+  resetAfterSubmit = false,
   onSubmit,
   onCancel,
 }: DatasetQuestionEditorProps) {
   const [
     question,
     setQuestion,
-  ] = useState(initialValue.question);
+  ] = useState("");
 
   const [
     expectedAnswer,
     setExpectedAnswer,
-  ] = useState(
-    initialValue.expectedAnswer,
-  );
+  ] = useState("");
 
   const [
     contextsText,
     setContextsText,
-  ] = useState(
-    initialValue.expectedContexts.join(
-      "\n\n",
-    ),
-  );
+  ] = useState("");
 
   const [
     category,
     setCategory,
-  ] = useState(
-    String(
-      initialValue.metadata.category ?? "",
-    ),
-  );
+  ] = useState("");
 
   const [
     difficulty,
     setDifficulty,
-  ] = useState(
-    String(
-      initialValue.metadata.difficulty ??
-        "medium",
-    ),
-  );
+  ] = useState("medium");
 
   const [
     tagsText,
     setTagsText,
-  ] = useState(
-    Array.isArray(
-      initialValue.metadata.tags,
-    )
-      ? initialValue.metadata.tags
-          .map(String)
-          .join(", ")
-      : "",
-  );
+  ] = useState("");
 
   const [
     notes,
     setNotes,
-  ] = useState(
-    String(
-      initialValue.metadata.notes ?? "",
-    ),
-  );
+  ] = useState("");
 
   const [
     saving,
@@ -102,6 +113,61 @@ function DatasetQuestionEditor({
     error,
     setError,
   ] = useState<string | null>(null);
+
+  function loadInitialValue(
+    value: DatasetQuestionCreate,
+  ) {
+    setQuestion(value.question);
+
+    setExpectedAnswer(
+      value.expectedAnswer,
+    );
+
+    setContextsText(
+      value.expectedContexts.join(
+        "\n\n",
+      ),
+    );
+
+    setCategory(
+      metadataText(
+        value.metadata.category,
+      ),
+    );
+
+    setDifficulty(
+      metadataText(
+        value.metadata.difficulty,
+        "medium",
+      ),
+    );
+
+    setTagsText(
+      metadataTags(
+        value.metadata.tags,
+      ),
+    );
+
+    setNotes(
+      metadataText(
+        value.metadata.notes,
+      ),
+    );
+
+    setError(null);
+  }
+
+  function resetForm() {
+    loadInitialValue(
+      EMPTY_QUESTION,
+    );
+  }
+
+  useEffect(() => {
+    loadInitialValue(
+      initialValue,
+    );
+  }, [initialValue]);
 
   const expectedContexts = useMemo(
     () =>
@@ -118,20 +184,28 @@ function DatasetQuestionEditor({
     () =>
       tagsText
         .split(",")
-        .map((tag) => tag.trim())
+        .map((tag) =>
+          tag.trim(),
+        )
         .filter(Boolean),
     [tagsText],
   );
 
   async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>,
+    event: FormEvent<HTMLFormElement>,
   ) {
     event.preventDefault();
 
-    if (question.trim().length < 3) {
+    const normalizedQuestion =
+      question.trim();
+
+    if (
+      normalizedQuestion.length < 3
+    ) {
       setError(
         "La pregunta debe tener al menos 3 caracteres.",
       );
+
       return;
     }
 
@@ -140,7 +214,8 @@ function DatasetQuestionEditor({
 
     try {
       await onSubmit({
-        question: question.trim(),
+        question:
+          normalizedQuestion,
         expectedAnswer:
           expectedAnswer.trim(),
         expectedContexts,
@@ -151,14 +226,27 @@ function DatasetQuestionEditor({
           tags,
           notes:
             notes.trim() || null,
-          source: "frontend-editor",
+          source:
+            metadataText(
+              initialValue.metadata.source,
+              "frontend-editor",
+            ),
         },
+        orderIndex:
+          initialValue.orderIndex,
       });
+
+      if (resetAfterSubmit) {
+        resetForm();
+      }
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "No se pudo guardar la pregunta.",
+          : (
+            "No se pudo guardar " +
+            "la pregunta."
+          ),
       );
     } finally {
       setSaving(false);
@@ -176,15 +264,9 @@ function DatasetQuestionEditor({
             Caso de evaluación
           </span>
 
-          <h3>
-            Pregunta y respuesta esperada
-          </h3>
+          <h3>{title}</h3>
 
-          <p>
-            Define el caso que utilizará el
-            pipeline para evaluar la
-            recuperación y la generación.
-          </p>
+          <p>{description}</p>
         </div>
       </div>
 
@@ -194,6 +276,7 @@ function DatasetQuestionEditor({
 
           <button
             type="button"
+            disabled={saving}
             onClick={() =>
               setError(null)
             }
@@ -211,9 +294,14 @@ function DatasetQuestionEditor({
             required
             minLength={3}
             rows={4}
-            placeholder="Escribe la pregunta que se utilizará durante la evaluación."
+            placeholder={
+              "Escribe la pregunta que se " +
+              "utilizará durante la evaluación."
+            }
             value={question}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setQuestion(
                 event.target.value,
@@ -229,9 +317,15 @@ function DatasetQuestionEditor({
 
           <textarea
             rows={4}
-            placeholder="Respuesta de referencia con la que se comparará la salida del modelo."
+            placeholder={
+              "Respuesta de referencia con " +
+              "la que se comparará la salida " +
+              "del modelo."
+            }
             value={expectedAnswer}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setExpectedAnswer(
                 event.target.value,
@@ -247,9 +341,15 @@ function DatasetQuestionEditor({
 
           <textarea
             rows={6}
-            placeholder={"Escribe un contexto esperado.\n\nSepara cada contexto adicional con una línea en blanco."}
+            placeholder={
+              "Escribe un contexto esperado." +
+              "\n\nSepara cada contexto " +
+              "adicional con una línea en blanco."
+            }
             value={contextsText}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setContextsText(
                 event.target.value,
@@ -274,7 +374,9 @@ function DatasetQuestionEditor({
             type="text"
             placeholder="Ej. normativa"
             value={category}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setCategory(
                 event.target.value,
@@ -288,7 +390,9 @@ function DatasetQuestionEditor({
 
           <select
             value={difficulty}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setDifficulty(
                 event.target.value,
@@ -314,9 +418,13 @@ function DatasetQuestionEditor({
 
           <input
             type="text"
-            placeholder="rag, normativa, precisión"
+            placeholder={
+              "rag, normativa, precisión"
+            }
             value={tagsText}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setTagsText(
                 event.target.value,
@@ -334,9 +442,14 @@ function DatasetQuestionEditor({
 
           <textarea
             rows={3}
-            placeholder="Observaciones internas sobre el caso de evaluación."
+            placeholder={
+              "Observaciones internas sobre " +
+              "el caso de evaluación."
+            }
             value={notes}
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
             onChange={(event) =>
               setNotes(
                 event.target.value,
@@ -352,7 +465,9 @@ function DatasetQuestionEditor({
             <button
               className="secondary-button"
               type="button"
-              disabled={saving}
+              disabled={
+                disabled || saving
+              }
               onClick={onCancel}
             >
               Cancelar
@@ -364,7 +479,9 @@ function DatasetQuestionEditor({
           <button
             className="primary-button"
             type="submit"
-            disabled={disabled || saving}
+            disabled={
+              disabled || saving
+            }
           >
             {saving
               ? "Guardando…"

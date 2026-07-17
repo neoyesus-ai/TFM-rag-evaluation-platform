@@ -23,8 +23,10 @@ from app.schemas.dataset import (
     EvaluationDatasetResponse,
     EvaluationDatasetStatusUpdate,
     EvaluationDatasetSummaryResponse,
+    EvaluationDatasetUpdate,
     EvaluationQuestionCreate,
     EvaluationQuestionResponse,
+    EvaluationQuestionUpdate,
 )
 
 
@@ -50,10 +52,62 @@ async def get_dataset_or_404(
 
     if load_questions:
         query = query.options(
-            selectinload(EvaluationDataset.questions)
+            selectinload(
+                EvaluationDataset.questions
+            )
         )
 
     result = await session.execute(query)
+    dataset = result.scalar_one_or_none()
+
+    if dataset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset no encontrado.",
+        )
+
+    return dataset
+
+
+async def get_question_or_404(
+    question_id: uuid.UUID,
+    session: AsyncSession,
+) -> EvaluationQuestion:
+    result = await session.execute(
+        select(EvaluationQuestion).where(
+            EvaluationQuestion.id
+            == question_id
+        )
+    )
+
+    question = result.scalar_one_or_none()
+
+    if question is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pregunta no encontrada.",
+        )
+
+    return question
+
+
+async def load_dataset_with_questions(
+    dataset_id: uuid.UUID,
+    session: AsyncSession,
+) -> EvaluationDataset:
+    result = await session.execute(
+        select(EvaluationDataset)
+        .options(
+            selectinload(
+                EvaluationDataset.questions
+            )
+        )
+        .where(
+            EvaluationDataset.id
+            == dataset_id
+        )
+    )
+
     dataset = result.scalar_one_or_none()
 
     if dataset is None:
@@ -86,13 +140,16 @@ async def create_dataset(
     ):
         order_index = (
             question_payload.order_index
-            if question_payload.order_index is not None
+            if question_payload.order_index
+            is not None
             else position
         )
 
         dataset.questions.append(
             EvaluationQuestion(
-                question=question_payload.question,
+                question=(
+                    question_payload.question
+                ),
                 expected_answer=(
                     question_payload.expected_answer
                 ),
@@ -114,27 +171,27 @@ async def create_dataset(
         await session.rollback()
 
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
             detail=(
-                "Ya existe un dataset con ese nombre "
-                "y número de versión."
+                "Ya existe un dataset con "
+                "ese nombre y número de "
+                "versión."
             ),
         ) from exc
 
-    result = await session.execute(
-        select(EvaluationDataset)
-        .options(
-            selectinload(EvaluationDataset.questions)
-        )
-        .where(EvaluationDataset.id == dataset.id)
+    return await load_dataset_with_questions(
+        dataset_id=dataset.id,
+        session=session,
     )
-
-    return result.scalar_one()
 
 
 @router.get(
     "",
-    response_model=list[EvaluationDatasetSummaryResponse],
+    response_model=list[
+        EvaluationDatasetSummaryResponse
+    ],
 )
 async def list_datasets(
     session: DatabaseSession,
@@ -142,7 +199,9 @@ async def list_datasets(
     result = await session.execute(
         select(
             EvaluationDataset,
-            func.count(EvaluationQuestion.id).label(
+            func.count(
+                EvaluationQuestion.id
+            ).label(
                 "question_count"
             ),
         )
@@ -151,7 +210,9 @@ async def list_datasets(
             EvaluationQuestion.dataset_id
             == EvaluationDataset.id,
         )
-        .group_by(EvaluationDataset.id)
+        .group_by(
+            EvaluationDataset.id
+        )
         .order_by(
             EvaluationDataset.created_at.desc()
         )
@@ -161,14 +222,23 @@ async def list_datasets(
         {
             "id": dataset.id,
             "name": dataset.name,
-            "description": dataset.description,
+            "description": (
+                dataset.description
+            ),
             "version": dataset.version,
             "status": dataset.status,
-            "created_at": dataset.created_at,
-            "updated_at": dataset.updated_at,
-            "question_count": question_count,
+            "created_at": (
+                dataset.created_at
+            ),
+            "updated_at": (
+                dataset.updated_at
+            ),
+            "question_count": (
+                question_count
+            ),
         }
-        for dataset, question_count in result.all()
+        for dataset, question_count
+        in result.all()
     ]
 
 
@@ -184,6 +254,53 @@ async def get_dataset(
         dataset_id=dataset_id,
         session=session,
         load_questions=True,
+    )
+
+
+@router.patch(
+    "/{dataset_id}",
+    response_model=EvaluationDatasetResponse,
+)
+async def update_dataset(
+    dataset_id: uuid.UUID,
+    payload: EvaluationDatasetUpdate,
+    session: DatabaseSession,
+) -> EvaluationDataset:
+    dataset = await get_dataset_or_404(
+        dataset_id=dataset_id,
+        session=session,
+    )
+
+    update_data = payload.model_dump(
+        exclude_unset=True,
+    )
+
+    for field, value in update_data.items():
+        setattr(
+            dataset,
+            field,
+            value,
+        )
+
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "Ya existe un dataset con "
+                "ese nombre y número de "
+                "versión."
+            ),
+        ) from exc
+
+    return await load_dataset_with_questions(
+        dataset_id=dataset.id,
+        session=session,
     )
 
 
@@ -214,8 +331,14 @@ async def add_dataset_question(
             )
         )
 
+        maximum_order = (
+            result.scalar_one_or_none()
+        )
+
         order_index = (
-            result.scalar_one_or_none() or -1
+            -1
+            if maximum_order is None
+            else maximum_order
         ) + 1
     else:
         order_index = payload.order_index
@@ -223,9 +346,15 @@ async def add_dataset_question(
     question = EvaluationQuestion(
         dataset_id=dataset_id,
         question=payload.question,
-        expected_answer=payload.expected_answer,
-        expected_contexts=payload.expected_contexts,
-        question_metadata=payload.metadata,
+        expected_answer=(
+            payload.expected_answer
+        ),
+        expected_contexts=(
+            payload.expected_contexts
+        ),
+        question_metadata=(
+            payload.metadata
+        ),
         order_index=order_index,
     )
 
@@ -237,10 +366,71 @@ async def add_dataset_question(
         await session.rollback()
 
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
             detail=(
-                "Ya existe una pregunta con ese "
-                "order_index en el dataset."
+                "Ya existe una pregunta con "
+                "ese order_index en el "
+                "dataset."
+            ),
+        ) from exc
+
+    await session.refresh(question)
+
+    return question
+
+
+@router.patch(
+    "/questions/{question_id}",
+    response_model=EvaluationQuestionResponse,
+)
+async def update_dataset_question(
+    question_id: uuid.UUID,
+    payload: EvaluationQuestionUpdate,
+    session: DatabaseSession,
+) -> EvaluationQuestion:
+    question = await get_question_or_404(
+        question_id=question_id,
+        session=session,
+    )
+
+    update_data = payload.model_dump(
+        exclude_unset=True,
+    )
+
+    metadata = update_data.pop(
+        "metadata",
+        None,
+    )
+
+    for field, value in update_data.items():
+        setattr(
+            question,
+            field,
+            value,
+        )
+
+    if "metadata" in payload.model_fields_set:
+        question.question_metadata = (
+            metadata
+            if metadata is not None
+            else {}
+        )
+
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "Ya existe una pregunta con "
+                "ese order_index en el "
+                "dataset."
             ),
         ) from exc
 
@@ -261,51 +451,88 @@ async def update_dataset_status(
     dataset = await get_dataset_or_404(
         dataset_id=dataset_id,
         session=session,
-        load_questions=True,
     )
 
     dataset.status = payload.status
 
     await session.commit()
-    await session.refresh(dataset)
 
-    return dataset
+    return await load_dataset_with_questions(
+        dataset_id=dataset.id,
+        session=session,
+    )
 
 
 @router.delete(
     "/questions/{question_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=(
+        status.HTTP_204_NO_CONTENT
+    ),
 )
 async def delete_dataset_question(
     question_id: uuid.UUID,
     session: DatabaseSession,
 ) -> Response:
-    result = await session.execute(
-        delete(EvaluationQuestion)
-        .where(EvaluationQuestion.id == question_id)
-        .returning(EvaluationQuestion.id)
+    question = await get_question_or_404(
+        question_id=question_id,
+        session=session,
     )
 
-    deleted_id = result.scalar_one_or_none()
+    dataset_id = question.dataset_id
+    deleted_order = question.order_index
 
-    if deleted_id is None:
+    await session.delete(question)
+    await session.flush()
+
+    result = await session.execute(
+        select(EvaluationQuestion)
+        .where(
+            EvaluationQuestion.dataset_id
+            == dataset_id,
+            EvaluationQuestion.order_index
+            > deleted_order,
+        )
+        .order_by(
+            EvaluationQuestion.order_index
+        )
+    )
+
+    following_questions = list(
+        result.scalars().all()
+    )
+
+    for following_question in (
+        following_questions
+    ):
+        following_question.order_index -= 1
+
+    try:
+        await session.commit()
+    except IntegrityError as exc:
         await session.rollback()
 
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pregunta no encontrada.",
-        )
-
-    await session.commit()
+            status_code=(
+                status.HTTP_409_CONFLICT
+            ),
+            detail=(
+                "No se pudo reorganizar el "
+                "orden de las preguntas."
+            ),
+        ) from exc
 
     return Response(
-        status_code=status.HTTP_204_NO_CONTENT
+        status_code=(
+            status.HTTP_204_NO_CONTENT
+        )
     )
 
 
 @router.delete(
     "/{dataset_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=(
+        status.HTTP_204_NO_CONTENT
+    ),
 )
 async def delete_dataset(
     dataset_id: uuid.UUID,
@@ -313,22 +540,33 @@ async def delete_dataset(
 ) -> Response:
     result = await session.execute(
         delete(EvaluationDataset)
-        .where(EvaluationDataset.id == dataset_id)
-        .returning(EvaluationDataset.id)
+        .where(
+            EvaluationDataset.id
+            == dataset_id
+        )
+        .returning(
+            EvaluationDataset.id
+        )
     )
 
-    deleted_id = result.scalar_one_or_none()
+    deleted_id = (
+        result.scalar_one_or_none()
+    )
 
     if deleted_id is None:
         await session.rollback()
 
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+            ),
             detail="Dataset no encontrado.",
         )
 
     await session.commit()
 
     return Response(
-        status_code=status.HTTP_204_NO_CONTENT
+        status_code=(
+            status.HTTP_204_NO_CONTENT
+        )
     )
