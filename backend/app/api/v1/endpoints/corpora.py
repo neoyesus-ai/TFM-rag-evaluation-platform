@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
 from app.models.corpus import Corpus
-from app.schemas.corpus import CorpusCreate, CorpusResponse
+from app.schemas.corpus import (
+    CorpusCreate,
+    CorpusResponse,
+    CorpusUpdate,
+)
 
 
 router = APIRouter(
@@ -87,3 +91,60 @@ async def get_corpus(
         )
 
     return corpus
+
+
+@router.patch(
+    "/{corpus_id}",
+    response_model=CorpusResponse,
+)
+async def update_corpus(
+    corpus_id: uuid.UUID,
+    payload: CorpusUpdate,
+    session: DatabaseSession,
+) -> Corpus:
+    corpus = await session.get(Corpus, corpus_id)
+
+    if corpus is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Corpus no encontrado.",
+        )
+
+    update_data = payload.model_dump(
+        exclude_unset=True,
+    )
+
+    for field, value in update_data.items():
+        setattr(corpus, field, value)
+
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ya existe un corpus con ese nombre.",
+        ) from exc
+
+    await session.refresh(corpus)
+    return corpus
+
+
+@router.delete(
+    "/{corpus_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_corpus(
+    corpus_id: uuid.UUID,
+    session: DatabaseSession,
+) -> None:
+    corpus = await session.get(Corpus, corpus_id)
+
+    if corpus is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Corpus no encontrado.",
+        )
+
+    await session.delete(corpus)
+    await session.commit()

@@ -1,4 +1,5 @@
 import DatasetsPage from "./pages/DatasetsPage";
+import CorporaPage from "./pages/CorporaPage";
 import {
   FormEvent,
   useCallback,
@@ -14,6 +15,7 @@ import ExperimentTemplatesPage from "./components/experiments/ExperimentTemplate
 
 type View =
   | "dashboard"
+  | "corpora"
   | "datasets"
   | "experiments"
   | "templates"
@@ -830,6 +832,10 @@ function App() {
         <AnalyticsDashboard />
       </>
     );
+  }
+
+  function renderCorpora() {
+    return <CorporaPage />;
   }
 
   function renderDatasets() {
@@ -1870,6 +1876,9 @@ function App() {
 
   function renderCurrentView() {
     switch (view) {
+      case "corpora":
+        return renderCorpora();
+
       case "datasets":
         return renderDatasets();
 
@@ -1922,6 +1931,20 @@ function App() {
             }
           >
             Panel general
+          </button>
+
+          <button
+            type="button"
+            className={
+              view === "corpora"
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setView("corpora")
+            }
+          >
+            Corpus
           </button>
 
           <button

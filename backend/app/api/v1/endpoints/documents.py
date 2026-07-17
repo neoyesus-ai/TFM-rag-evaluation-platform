@@ -246,3 +246,40 @@ async def download_document(
         url=url,
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
+
+
+@router.delete(
+    "/{document_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_document(
+    corpus_id: uuid.UUID,
+    document_id: uuid.UUID,
+    session: DatabaseSession,
+) -> None:
+    result = await session.execute(
+        select(Document).where(
+            Document.id == document_id,
+            Document.corpus_id == corpus_id,
+        )
+    )
+
+    document = result.scalar_one_or_none()
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Documento no encontrado.",
+        )
+
+    try:
+        object_storage.delete_object(
+            document.object_name,
+        )
+    except Exception:
+        # Si el objeto ya no existe en MinIO,
+        # eliminamos igualmente el registro.
+        pass
+
+    await session.delete(document)
+    await session.commit()
