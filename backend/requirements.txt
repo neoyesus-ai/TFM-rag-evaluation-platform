@@ -34,3 +34,6 @@ alembic==1.18.5
 
 PyJWT
 pwdlib[argon2]
+
+pypdf
+python-docx
