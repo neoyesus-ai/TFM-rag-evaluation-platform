@@ -1,0 +1,43 @@
+template_key: retrieval-strategy-comparison-v1
+schema_version: "1.0"
+name: Similarity frente a MMR
+description: Compara dos estrategias de recuperación manteniendo constante el pipeline restante.
+category: retrieval
+tags:
+  - retrieval
+  - similarity
+  - mmr
+
+configuration:
+  schema_version: "1.0"
+
+  chunking:
+    strategy: recursive
+    chunk_size: 512
+    chunk_overlap: 64
+
+  embedding:
+    provider: ollama
+    model: nomic-embed-text
+
+  retrieval:
+    strategy: similarity
+    top_k: 5
+
+  generation:
+    provider: ollama
+    model: llama3.1
+    temperature: 0.0
+
+  evaluation:
+    metrics:
+      - faithfulness
+      - answer_relevancy
+      - context_precision
+      - context_recall
+      - latency_ms
+
+matrix:
+  retrieval.strategy:
+    - similarity
+    - mmr

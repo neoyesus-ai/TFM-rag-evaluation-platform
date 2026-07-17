@@ -1,3 +1,4 @@
+cat > docker-compose.yml <<'EOF'
 services:
   postgres:
     image: postgres:16-alpine
@@ -118,12 +119,8 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      AWS_DEFAULT_REGION: us-east-1
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      MLFLOW_SERVER_ALLOWED_HOSTS: >-
-        mlflow,mlflow:5000,localhost,localhost:5000,
-        127.0.0.1,127.0.0.1:5000
-      GIT_PYTHON_REFRESH: quiet
+      AWS_DEFAULT_REGION: us-east-1
     command:
       - mlflow
       - server
@@ -136,8 +133,6 @@ services:
       - --artifacts-destination
       - s3://mlflow-artifacts
       - --serve-artifacts
-      - --allowed-hosts
-      - mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
     ports:
       - "5000:5000"
     depends_on:
@@ -200,7 +195,7 @@ services:
     environment:
       APP_NAME: "TFM RAG Evaluation Platform"
       APP_VERSION: "0.1.0"
-      ENVIRONMENT: development
+      ENVIRONMENT: "development"
 
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -225,16 +220,6 @@ services:
       MLFLOW_EXPERIMENT_NAME: tfm-rag-experiments
 
       MAX_UPLOAD_SIZE_MB: 25
-
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
-      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-480}
-
-      AUTH_ADMIN_USERNAME: ${AUTH_ADMIN_USERNAME}
-      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD}
-      AUTH_ADMIN_FULL_NAME: ${AUTH_ADMIN_FULL_NAME}
-      AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-}
-
     volumes:
       - ./experiments/templates:/app/experiment_templates:ro
     ports:
@@ -304,3 +289,4 @@ volumes:
 
   frontend_node_modules:
     name: tfm-frontend-node-modules
+EOF
