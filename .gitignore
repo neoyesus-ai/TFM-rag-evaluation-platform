@@ -39,3 +39,6 @@ indexes/
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# TypeScript incremental build
+*.tsbuildinfo
