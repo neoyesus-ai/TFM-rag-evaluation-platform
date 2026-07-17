@@ -2,6 +2,8 @@ import type {
   FormEvent,
 } from "react";
 
+import DatasetEditorPage from "../components/datasets/DatasetEditorPage";
+
 export type DatasetSummary = {
   id: string;
   name: string;
@@ -79,6 +81,15 @@ function DatasetsPage({
   onDatasetFormChange,
   onCreateDataset,
 }: DatasetsPageProps) {
+  if (selectedDataset) {
+    return (
+      <DatasetEditorPage
+        datasetId={selectedDataset.id}
+        onClose={onCloseDataset}
+      />
+    );
+  }
+
   return (
     <>
       <header className="page-header">
@@ -87,12 +98,13 @@ function DatasetsPage({
             Recursos de evaluación
           </span>
 
-          <h1>Datasets</h1>
+          <h1>Dataset Studio</h1>
 
           <p>
-            Gestiona las preguntas,
-            respuestas esperadas y datos
-            de evaluación.
+            Crea y gestiona las preguntas,
+            respuestas esperadas, contextos
+            y metadatos utilizados durante
+            la evaluación de los pipelines.
           </p>
         </div>
       </header>
@@ -190,7 +202,8 @@ function DatasetsPage({
 
               <p>
                 Crea un conjunto inicial
-                con una pregunta.
+                con su primera pregunta de
+                evaluación.
               </p>
             </div>
           </div>
@@ -206,6 +219,7 @@ function DatasetsPage({
                 required
                 minLength={3}
                 value={datasetForm.name}
+                disabled={actionLoading}
                 onChange={(event) =>
                   onDatasetFormChange(
                     (current) => ({
@@ -226,6 +240,7 @@ function DatasetsPage({
                 value={
                   datasetForm.description
                 }
+                disabled={actionLoading}
                 onChange={(event) =>
                   onDatasetFormChange(
                     (current) => ({
@@ -248,6 +263,7 @@ function DatasetsPage({
                 value={
                   datasetForm.question
                 }
+                disabled={actionLoading}
                 onChange={(event) =>
                   onDatasetFormChange(
                     (current) => ({
@@ -268,6 +284,7 @@ function DatasetsPage({
                 value={
                   datasetForm.expectedAnswer
                 }
+                disabled={actionLoading}
                 onChange={(event) =>
                   onDatasetFormChange(
                     (current) => ({
@@ -292,108 +309,6 @@ function DatasetsPage({
           </form>
         </article>
       </section>
-
-      {selectedDataset && (
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <span className="eyebrow">
-                Detalle del dataset
-              </span>
-
-              <h2>
-                {selectedDataset.name}
-              </h2>
-
-              <p>
-                Versión{" "}
-                {selectedDataset.version}
-                {" · "}
-                {
-                  selectedDataset.questions
-                    .length
-                }{" "}
-                pregunta
-                {selectedDataset.questions
-                  .length === 1
-                  ? ""
-                  : "s"}
-              </p>
-            </div>
-
-            <button
-              className="icon-button"
-              type="button"
-              onClick={onCloseDataset}
-            >
-              Cerrar
-            </button>
-          </div>
-
-          <div className="question-list">
-            {selectedDataset.questions.map(
-              (question) => (
-                <article
-                  className="question-card"
-                  key={question.id}
-                >
-                  <span>
-                    Pregunta{" "}
-                    {question.order_index +
-                      1}
-                  </span>
-
-                  <h3>
-                    {question.question}
-                  </h3>
-
-                  <p>
-                    <strong>
-                      Respuesta esperada:
-                    </strong>{" "}
-                    {question.expected_answer ||
-                      "No definida"}
-                  </p>
-
-                  {question.expected_contexts &&
-                    question
-                      .expected_contexts
-                      .length > 0 && (
-                    <div className="question-contexts">
-                      <strong>
-                        Contextos esperados
-                      </strong>
-
-                      <ul>
-                        {question.expected_contexts.map(
-                          (
-                            context,
-                            index,
-                          ) => (
-                            <li
-                              key={`${question.id}-${index}`}
-                            >
-                              {context}
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </div>
-                  )}
-                </article>
-              ),
-            )}
-
-            {selectedDataset.questions
-              .length === 0 && (
-              <p className="empty-message">
-                Este dataset no contiene
-                preguntas.
-              </p>
-            )}
-          </div>
-        </section>
-      )}
     </>
   );
 }
