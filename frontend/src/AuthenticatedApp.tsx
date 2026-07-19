@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 
+import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
 import CorporaPage from "./pages/CorporaPage";
 import AnalyticsPage from "./components/analytics/AnalyticsPage";
 import ComparatorPage from "./components/analytics/ComparatorPage";
@@ -294,6 +295,11 @@ function ResultMetricCard({
 function App() {
   const [view, setView] =
     useState<AppView>("dashboard");
+  
+  const [
+    experimentWorkspace,
+    setExperimentWorkspace,
+  ] = useState<"list" | "builder">("list");
 
   const [corpora, setCorpora] =
     useState<Corpus[]>([]);
@@ -974,6 +980,22 @@ function App() {
   }
 
   function renderExperiments() {
+    if (experimentWorkspace === "builder") {
+      return (
+        <ExperimentBuilderPage
+          onCreated={async () => {
+            setExperimentWorkspace("list");
+            void loadOverview();
+          }}
+          onOpenRuns={() => {
+            setExperimentWorkspace("list");
+            setView("runs");
+          }}
+        />
+      );
+    }
+
+
     return (
       <>
         <header className="page-header">
@@ -990,6 +1012,16 @@ function App() {
               completo.
             </p>
           </div>
+
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() =>
+              setExperimentWorkspace("builder")
+            }
+          >
+            Nuevo experimento
+          </button>
         </header>
 
         <section className="panel">
