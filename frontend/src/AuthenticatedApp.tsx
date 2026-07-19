@@ -1239,7 +1239,10 @@ function App() {
       artifacts,
     } = selectedRunResults;
 
-    const mlflowUrl = `/mlflow/#/experiments/${selectedRunResults.mlflow_experiment_id}/runs/${selectedRunResults.mlflow_run_id}`;
+    const mlflowUrl = 
+      `${window.location.protocol}//${window.location.hostname}:5000` +
+      `/#/experiments/${selectedRunResults.mlflow_experiment_id}` +
+      `/runs/${selectedRunResults.mlflow_run_id}`;
 
     return (
       <section className="results-panel">
