@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 
+import CorporaPage from "./pages/CorporaPage";
 import AnalyticsPage from "./components/analytics/AnalyticsPage";
 import ComparatorPage from "./components/analytics/ComparatorPage";
 import InsightsPage from "./components/analytics/InsightsPage";
@@ -13,7 +14,6 @@ import LeaderboardPage from "./components/analytics/LeaderboardPage";
 import RecommendationsPage from "./components/analytics/RecommendationsPage";
 import OperationalDashboard from "./components/dashboard/OperationalDashboard";
 import AppSidebar from "./components/layout/AppSidebar";
-import ComingSoonView from "./components/layout/ComingSoonView";
 import type { AppView } from "./types/navigation";
 import type {
   ExperimentRun,
@@ -1799,19 +1799,7 @@ function App() {
   function renderCurrentView() {
     switch (view) {
       case "corpora":
-        return (
-          <ComingSoonView
-            eyebrow="Gestión documental"
-            title="Corpora y documentos"
-            description="Gestión de colecciones documentales, carga de archivos e indexación para experimentos RAG."
-            plannedFeatures={[
-              "Crear y editar corpora",
-              "Subir documentos",
-              "Consultar estado de indexación",
-              "Eliminar o reemplazar archivos",
-            ]}
-          />
-        );
+        return <CorporaPage />;
 
       case "datasets":
         return renderDatasets();
