@@ -101,30 +101,6 @@ function AppSidebar({
         )}
       </nav>
 
-      <div className="app-sidebar-external">
-        <span className="app-navigation-group-label">
-          Herramientas
-        </span>
-
-        <a
-          href="http://localhost:5000"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <span>ML</span>
-          <strong>MLflow</strong>
-        </a>
-
-        <a
-          href="http://localhost:3000"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <span>MB</span>
-          <strong>Metabase</strong>
-        </a>
-      </div>
-
       <div className="app-sidebar-status">
         <span
           className={[

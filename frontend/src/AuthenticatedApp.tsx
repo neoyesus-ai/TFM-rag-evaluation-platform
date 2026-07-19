@@ -1774,7 +1774,7 @@ function App() {
         <section className="service-grid">
           <a
             className="service-card"
-            href="http://localhost:5000"
+            href={`${window.location.protocol}//${window.location.hostname}:5000`}
             target="_blank"
             rel="noreferrer"
           >
@@ -1788,7 +1788,7 @@ function App() {
 
           <a
             className="service-card"
-            href="http://localhost:9001"
+            href={`${window.location.protocol}//${window.location.hostname}:9000`}
             target="_blank"
             rel="noreferrer"
           >
@@ -1802,7 +1802,7 @@ function App() {
 
           <a
             className="service-card"
-            href="http://localhost:3000"
+            href={`${window.location.protocol}//${window.location.hostname}:3000`}
             target="_blank"
             rel="noreferrer"
           >
@@ -1816,7 +1816,7 @@ function App() {
 
           <a
             className="service-card"
-            href="http://localhost:8000/docs"
+            href={`${window.location.protocol}//${window.location.hostname}:8000/docs`}
             target="_blank"
             rel="noreferrer"
           >
