@@ -92,6 +92,15 @@ async def ensure_admin_user(
         if not existing_user.is_active:
             existing_user.is_active = True
             changed = True
+        
+        if not verify_password(
+            plain_password=password,
+            password_hash=existing_user.password_hash,
+        ):
+            existing_user.password_hash = hash_password(
+                password
+            )
+            changed = True
 
         if changed:
             await session.commit()
