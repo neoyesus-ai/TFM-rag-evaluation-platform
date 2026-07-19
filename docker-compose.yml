@@ -120,9 +120,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_DEFAULT_REGION: us-east-1
       MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      MLFLOW_SERVER_ALLOWED_HOSTS: >-
-        mlflow,mlflow:5000,localhost,localhost:5000,
-        127.0.0.1,127.0.0.1:5000
+      MLFLOW_SERVER_ALLOWED_HOSTS: ${MLFLOW_ALLOWED_HOSTS}
       GIT_PYTHON_REFRESH: quiet
     command:
       - mlflow
@@ -137,7 +135,7 @@ services:
       - s3://mlflow-artifacts
       - --serve-artifacts
       - --allowed-hosts
-      - mlflow,mlflow:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
+      - ${MLFLOW_ALLOWED_HOSTS}
     ports:
       - "5000:5000"
     depends_on:

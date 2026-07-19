@@ -1,5 +1,3 @@
-import DatasetsPage from "./pages/DatasetsPage";
-import CorporaPage from "./pages/CorporaPage";
 import {
   FormEvent,
   useCallback,
@@ -8,20 +6,22 @@ import {
   useState,
 } from "react";
 
-import AnalyticsDashboard from "./components/analytics/AnalyticsDashboard";
-import DashboardPage from "./pages/DashboardPage";
-import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
-import ExperimentTemplatesPage from "./components/experiments/ExperimentTemplatesPage";
-
-type View =
-  | "dashboard"
-  | "corpora"
-  | "datasets"
-  | "experiments"
-  | "templates"
-  | "runs"
-  | "analytics"
-  | "services";
+import AnalyticsPage from "./components/analytics/AnalyticsPage";
+import ComparatorPage from "./components/analytics/ComparatorPage";
+import InsightsPage from "./components/analytics/InsightsPage";
+import LeaderboardPage from "./components/analytics/LeaderboardPage";
+import RecommendationsPage from "./components/analytics/RecommendationsPage";
+import OperationalDashboard from "./components/dashboard/OperationalDashboard";
+import AppSidebar from "./components/layout/AppSidebar";
+import ComingSoonView from "./components/layout/ComingSoonView";
+import type { AppView } from "./types/navigation";
+import type {
+  ExperimentRun,
+  RunArtifact,
+  RunConfiguration,
+  RunMetrics,
+  RunResults,
+} from "./types/runResults";
 
 type Corpus = {
   id: string;
@@ -81,100 +81,6 @@ type Experiment = {
 
 type ExperimentDetail = Experiment & {
   versions: ExperimentVersion[];
-};
-
-type ExperimentRun = {
-  id: string;
-  experiment_version_id: string;
-  mlflow_run_id: string | null;
-  status: string;
-  started_at: string | null;
-  finished_at: string | null;
-  duration_ms: number | null;
-  error_message: string | null;
-  created_at: string;
-};
-
-type RunMetrics = {
-  overall_score: number | null;
-  groundedness: number | null;
-  answer_token_f1: number | null;
-  answer_token_precision: number | null;
-  answer_token_recall: number | null;
-  answer_relevancy: number | null;
-
-  context_precision: number | null;
-  context_recall: number | null;
-
-  retrieval_mean_similarity: number | null;
-  retrieval_min_similarity: number | null;
-  retrieval_max_similarity: number | null;
-  retrieval_duration_ms: number | null;
-  retrieval_mean_question_latency_ms: number | null;
-
-  generation_duration_ms: number | null;
-  generation_mean_latency_ms: number | null;
-  generation_min_latency_ms: number | null;
-  generation_max_latency_ms: number | null;
-
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  total_tokens: number | null;
-  completion_tokens_per_second: number | null;
-
-  document_count: number | null;
-  chunk_count: number | null;
-  embedding_count: number | null;
-  indexed_chunk_count: number | null;
-  question_count: number | null;
-
-  runner_total_ms: number | null;
-};
-
-type RunConfiguration = {
-  generation_provider: string | null;
-  generation_model: string | null;
-  generation_temperature: string | null;
-
-  embedding_provider: string | null;
-  embedding_model: string | null;
-
-  chunking_strategy: string | null;
-  chunk_size: string | null;
-  chunk_overlap: string | null;
-
-  retrieval_strategy: string | null;
-  retrieval_top_k: string | null;
-};
-
-type RunArtifact = {
-  path: string;
-  is_dir: boolean;
-  file_size: number | null;
-};
-
-type RunResults = {
-  run: ExperimentRun;
-
-  experiment_id: string;
-  experiment_name: string;
-  experiment_version: number;
-  configuration_hash: string;
-
-  mlflow_run_id: string;
-  mlflow_experiment_id: string;
-  mlflow_status: string;
-  mlflow_start_time: string | null;
-  mlflow_end_time: string | null;
-  artifact_uri: string | null;
-
-  metrics: RunMetrics;
-  configuration: RunConfiguration;
-
-  raw_metrics: Record<string, number>;
-  parameters: Record<string, string>;
-  tags: Record<string, string>;
-  artifacts: RunArtifact[];
 };
 
 type ServiceStatus = {
@@ -387,7 +293,7 @@ function ResultMetricCard({
 
 function App() {
   const [view, setView] =
-    useState<View>("dashboard");
+    useState<AppView>("dashboard");
 
   const [corpora, setCorpora] =
     useState<Corpus[]>([]);
@@ -415,13 +321,6 @@ function App() {
   ] = useState<ExperimentDetail | null>(
     null,
   );
-
-  const [
-    experimentWorkspace,
-    setExperimentWorkspace,
-  ] = useState<
-    "list" | "builder"
-  >("list");
 
   const [
     selectedRunResults,
@@ -767,27 +666,43 @@ function App() {
   }
 
   function renderDashboard() {
+    const questionCount = datasets.reduce(
+      (total, dataset) =>
+        total + dataset.question_count,
+      0,
+    );
+
+    const versionCount = experiments.reduce(
+      (total, experiment) => {
+        if (
+          selectedExperiment?.id ===
+          experiment.id
+        ) {
+          return (
+            total +
+            selectedExperiment.versions.length
+          );
+        }
+
+        return total;
+      },
+      0,
+    );
+
     return (
-      <DashboardPage
+      <OperationalDashboard
         corpusCount={corpora.length}
+        documentCount={corpora.length}
         datasetCount={datasets.length}
-        experimentCount={
-          experiments.length
-        }
+        questionCount={questionCount}
+        experimentCount={experiments.length}
+        versionCount={versionCount}
         runCount={runs.length}
-        completedRunCount={
-          completedRuns
-        }
-        failedRunCount={
-          failedRuns
-        }
-        averageDurationMs={
-          averageDuration
-        }
-        latestRuns={latestRuns}
-        systemStatus={
-          systemStatus
-        }
+        completedRunCount={completedRuns}
+        failedRunCount={failedRuns}
+        averageDurationMs={averageDuration}
+        recentRuns={latestRuns}
+        systemStatus={systemStatus}
         loading={loading}
         onRefresh={() =>
           void loadOverview()
@@ -795,105 +710,270 @@ function App() {
         onOpenRuns={() =>
           setView("runs")
         }
-        onOpenRunResults={(
-          runId,
-        ) => {
+        onOpenRun={(runId) => {
           setView("runs");
-
-          void openRunResults(
-            runId,
-          );
+          void openRunResults(runId);
         }}
       />
     );
   }
 
-  function renderAnalytics() {
+  function renderDatasets() {
     return (
       <>
         <header className="page-header">
           <div>
             <span className="eyebrow">
-              Evaluación experimental
+              Recursos de evaluación
             </span>
 
-            <h1>Resultados</h1>
+            <h1>Datasets</h1>
 
             <p>
-              Métricas de calidad,
-              rendimiento, consumo,
-              clasificación y recomendaciones
-              calculadas sobre el histórico
-              experimental.
+              Gestiona las preguntas,
+              respuestas esperadas y datos
+              de evaluación.
             </p>
           </div>
         </header>
 
-        <AnalyticsDashboard />
+        <section className="content-grid datasets-layout">
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>
+                  Datasets registrados
+                </h2>
+                <p>
+                  {datasets.length} conjuntos
+                  disponibles.
+                </p>
+              </div>
+            </div>
+
+            <div className="card-list">
+              {datasets.map(
+                (dataset) => (
+                  <button
+                    className="resource-card"
+                    type="button"
+                    key={dataset.id}
+                    onClick={() =>
+                      void openDataset(
+                        dataset.id,
+                      )
+                    }
+                  >
+                    <div>
+                      <strong>
+                        {dataset.name}
+                      </strong>
+                      <p>
+                        {dataset.description ||
+                          "Sin descripción"}
+                      </p>
+                    </div>
+
+                    <div className="resource-meta">
+                      <span>
+                        v{dataset.version}
+                      </span>
+                      <span>
+                        {
+                          dataset.question_count
+                        }{" "}
+                        preguntas
+                      </span>
+                      <span
+                        className={`status-badge status-${dataset.status}`}
+                      >
+                        {statusLabel(
+                          dataset.status,
+                        )}
+                      </span>
+                    </div>
+                  </button>
+                ),
+              )}
+
+              {datasets.length === 0 && (
+                <p className="empty-message">
+                  Todavía no hay datasets.
+                </p>
+              )}
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Nuevo dataset</h2>
+                <p>
+                  Crea un conjunto inicial
+                  con una pregunta.
+                </p>
+              </div>
+            </div>
+
+            <form
+              className="form-grid"
+              onSubmit={createDataset}
+            >
+              <label>
+                Nombre
+                <input
+                  required
+                  minLength={3}
+                  value={datasetForm.name}
+                  onChange={(event) =>
+                    setDatasetForm(
+                      (current) => ({
+                        ...current,
+                        name: event.target
+                          .value,
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                Descripción
+                <textarea
+                  rows={3}
+                  value={
+                    datasetForm.description
+                  }
+                  onChange={(event) =>
+                    setDatasetForm(
+                      (current) => ({
+                        ...current,
+                        description:
+                          event.target
+                            .value,
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                Pregunta inicial
+                <textarea
+                  required
+                  minLength={3}
+                  rows={3}
+                  value={
+                    datasetForm.question
+                  }
+                  onChange={(event) =>
+                    setDatasetForm(
+                      (current) => ({
+                        ...current,
+                        question:
+                          event.target
+                            .value,
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <label>
+                Respuesta esperada
+                <textarea
+                  rows={3}
+                  value={
+                    datasetForm.expectedAnswer
+                  }
+                  onChange={(event) =>
+                    setDatasetForm(
+                      (current) => ({
+                        ...current,
+                        expectedAnswer:
+                          event.target
+                            .value,
+                      }),
+                    )
+                  }
+                />
+              </label>
+
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={actionLoading}
+              >
+                Crear dataset
+              </button>
+            </form>
+          </article>
+        </section>
+
+        {selectedDataset && (
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>
+                  {selectedDataset.name}
+                </h2>
+                <p>
+                  Versión{" "}
+                  {selectedDataset.version} ·{" "}
+                  {
+                    selectedDataset.questions
+                      .length
+                  }{" "}
+                  preguntas
+                </p>
+              </div>
+
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() =>
+                  setSelectedDataset(null)
+                }
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="question-list">
+              {selectedDataset.questions.map(
+                (question) => (
+                  <article
+                    className="question-card"
+                    key={question.id}
+                  >
+                    <span>
+                      Pregunta{" "}
+                      {question.order_index +
+                        1}
+                    </span>
+
+                    <h3>
+                      {question.question}
+                    </h3>
+
+                    <p>
+                      <strong>
+                        Respuesta esperada:
+                      </strong>{" "}
+                      {question.expected_answer ||
+                        "No definida"}
+                    </p>
+                  </article>
+                ),
+              )}
+            </div>
+          </section>
+        )}
       </>
     );
   }
 
-  function renderCorpora() {
-    return <CorporaPage />;
-  }
-
-  function renderDatasets() {
-    return (
-      <DatasetsPage
-        datasets={datasets}
-        selectedDataset={
-          selectedDataset
-        }
-        datasetForm={datasetForm}
-        actionLoading={
-          actionLoading
-        }
-        onOpenDataset={(
-          datasetId,
-        ) => {
-          void openDataset(
-            datasetId,
-          );
-        }}
-        onCloseDataset={() => {
-          setSelectedDataset(null);
-        }}
-        onDatasetFormChange={(
-          updater,
-        ) => {
-          setDatasetForm(
-            updater,
-          );
-        }}
-        onCreateDataset={
-          createDataset
-        }
-      />
-    );
-  }
-
   function renderExperiments() {
-    if (
-      experimentWorkspace ===
-      "builder"
-    ) {
-      return (
-        <ExperimentBuilderPage
-          onCreated={async () => {
-            await loadOverview();
-          }}
-          onOpenRuns={() => {
-            setExperimentWorkspace(
-              "list",
-            );
-
-            setView("runs");
-          }}
-        />
-      );
-    }
-
     return (
       <>
         <header className="page-header">
@@ -905,107 +985,14 @@ function App() {
             <h1>Experimentos</h1>
 
             <p>
-              Crea configuraciones
-              reproducibles, consulta sus
+              Selecciona datasets, consulta
               versiones y ejecuta el pipeline
               completo.
             </p>
           </div>
-
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => {
-              setSelectedExperiment(
-                null,
-              );
-
-              setExperimentWorkspace(
-                "builder",
-              );
-            }}
-          >
-            Nuevo experimento
-          </button>
         </header>
 
-        <section className="experiment-management-summary">
-          <article>
-            <span>
-              Experimentos
-            </span>
-
-            <strong>
-              {experiments.length}
-            </strong>
-
-            <small>
-              configuraciones registradas
-            </small>
-          </article>
-
-          <article>
-            <span>
-              Versiones
-            </span>
-
-            <strong>
-              {selectedExperiment
-                ? selectedExperiment
-                    .versions.length
-                : "—"}
-            </strong>
-
-            <small>
-              del experimento seleccionado
-            </small>
-          </article>
-
-          <article>
-            <span>
-              Corpora
-            </span>
-
-            <strong>
-              {corpora.length}
-            </strong>
-
-            <small>
-              disponibles
-            </small>
-          </article>
-
-          <article>
-            <span>
-              Datasets
-            </span>
-
-            <strong>
-              {datasets.length}
-            </strong>
-
-            <small>
-              conjuntos de evaluación
-            </small>
-          </article>
-        </section>
-
         <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>
-                Experimentos registrados
-              </h2>
-
-              <p>
-                Selecciona un experimento
-                para consultar sus versiones,
-                asignar un dataset o ejecutar
-                una configuración.
-              </p>
-            </div>
-          </div>
-
           <div className="card-list">
             {experiments.map(
               (experiment) => {
@@ -1067,32 +1054,6 @@ function App() {
                 );
               },
             )}
-
-            {experiments.length === 0 && (
-              <div className="experiment-empty-state">
-                <strong>
-                  Todavía no hay experimentos
-                </strong>
-
-                <p>
-                  Utiliza el constructor para
-                  registrar la primera
-                  configuración experimental.
-                </p>
-
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() =>
-                    setExperimentWorkspace(
-                      "builder",
-                    )
-                  }
-                >
-                  Crear primer experimento
-                </button>
-              </div>
-            )}
           </div>
         </section>
 
@@ -1100,10 +1061,6 @@ function App() {
           <section className="panel">
             <div className="panel-heading">
               <div>
-                <span className="eyebrow">
-                  Detalle experimental
-                </span>
-
                 <h2>
                   {selectedExperiment.name}
                 </h2>
@@ -1113,16 +1070,7 @@ function App() {
                     selectedExperiment
                       .versions.length
                   }{" "}
-                  versión
-                  {selectedExperiment
-                    .versions.length === 1
-                    ? ""
-                    : "es"}{" "}
-                  disponible
-                  {selectedExperiment
-                    .versions.length === 1
-                    ? ""
-                    : "s"}.
+                  versiones disponibles.
                 </p>
               </div>
 
@@ -1145,8 +1093,7 @@ function App() {
 
                 <select
                   value={
-                    selectedExperiment
-                      .dataset_id ??
+                    selectedExperiment.dataset_id ??
                     ""
                   }
                   onChange={(event) => {
@@ -1171,14 +1118,8 @@ function App() {
                         key={dataset.id}
                         value={dataset.id}
                       >
-                        {dataset.name}
-                        {" · v"}
+                        {dataset.name} · v
                         {dataset.version}
-                        {" · "}
-                        {
-                          dataset.question_count
-                        }
-                        {" preguntas"}
                       </option>
                     ),
                   )}
@@ -1218,20 +1159,6 @@ function App() {
                           …
                         </code>
                       </p>
-
-                      <div className="experiment-version-meta">
-                        <span>
-                          Plantilla:{" "}
-                          {version.source_template_key ??
-                            "manual"}
-                        </span>
-
-                        <span>
-                          Commit:{" "}
-                          {version.git_commit ??
-                            "no asociado"}
-                        </span>
-                      </div>
                     </div>
 
                     <button
@@ -1239,8 +1166,7 @@ function App() {
                       type="button"
                       disabled={
                         actionLoading ||
-                        !selectedExperiment
-                          .dataset_id
+                        !selectedExperiment.dataset_id
                       }
                       onClick={() =>
                         void executeVersion(
@@ -1258,10 +1184,6 @@ function App() {
         )}
       </>
     );
-  }
-
-  function renderTemplates() {
-    return <ExperimentTemplatesPage />;
   }
 
   function renderRunResults() {
@@ -1877,7 +1799,19 @@ function App() {
   function renderCurrentView() {
     switch (view) {
       case "corpora":
-        return renderCorpora();
+        return (
+          <ComingSoonView
+            eyebrow="Gestión documental"
+            title="Corpora y documentos"
+            description="Gestión de colecciones documentales, carga de archivos e indexación para experimentos RAG."
+            plannedFeatures={[
+              "Crear y editar corpora",
+              "Subir documentos",
+              "Consultar estado de indexación",
+              "Eliminar o reemplazar archivos",
+            ]}
+          />
+        );
 
       case "datasets":
         return renderDatasets();
@@ -1885,14 +1819,23 @@ function App() {
       case "experiments":
         return renderExperiments();
 
-      case "templates":
-        return renderTemplates();
-
       case "runs":
         return renderRuns();
 
       case "analytics":
-        return renderAnalytics();
+        return <AnalyticsPage />;
+
+      case "comparator":
+        return <ComparatorPage />;
+
+      case "leaderboard":
+        return <LeaderboardPage />;
+
+      case "insights":
+        return <InsightsPage />;
+
+      case "recommendations":
+        return <RecommendationsPage />;
 
       case "services":
         return renderServices();
@@ -1904,158 +1847,13 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">
-            R
-          </div>
-
-          <div>
-            <strong>RAG Lab</strong>
-            <span>
-              TFM Evaluation Platform
-            </span>
-          </div>
-        </div>
-
-        <nav>
-          <button
-            type="button"
-            className={
-              view === "dashboard"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("dashboard")
-            }
-          >
-            Panel general
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "corpora"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("corpora")
-            }
-          >
-            Corpus
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "datasets"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("datasets")
-            }
-          >
-            Datasets
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "experiments"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("experiments")
-            }
-          >
-            Experimentos
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "templates"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("templates")
-            }
-          >
-            Plantillas
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "runs"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("runs")
-            }
-          >
-            Ejecuciones
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "analytics"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("analytics")
-            }
-          >
-            Resultados
-          </button>
-
-          <button
-            type="button"
-            className={
-              view === "services"
-                ? "active"
-                : ""
-            }
-            onClick={() =>
-              setView("services")
-            }
-          >
-            Servicios
-          </button>
-        </nav>
-
-        <div className="sidebar-footer">
-          <span
-            className={`status-dot ${
-              systemStatus?.status ===
-              "ok"
-                ? "online"
-                : ""
-            }`}
-          />
-
-          <div>
-            <strong>
-              {systemStatus?.status ===
-              "ok"
-                ? "Sistema operativo"
-                : "Estado desconocido"}
-            </strong>
-
-            <span>
-              Entorno experimental
-            </span>
-          </div>
-        </div>
-      </aside>
+      <AppSidebar
+        activeView={view}
+        systemStatus={
+          systemStatus?.status ?? null
+        }
+        onNavigate={setView}
+      />
 
       <main className="main-content">
         {error && (

@@ -10,6 +10,24 @@ import type {
 
 const API_BASE = "/api/v1";
 
+export type ExperimentRun = {
+  id: string;
+  experiment_version_id: string;
+  mlflow_run_id: string | null;
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "failed"
+    | "interrupted"
+    | string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  error_message?: string | null;
+  created_at?: string;
+};
+
 async function request<T>(
   path: string,
   options?: RequestInit,
@@ -193,17 +211,28 @@ export async function createExperimentFromBuiltinTemplate(
 
 export async function createExperimentRun(
   versionId: string,
-): Promise<{
-  id: string;
-  status: string;
-  experiment_version_id: string;
-  mlflow_run_id: string | null;
-}> {
-  return request(
+): Promise<ExperimentRun> {
+  return request<ExperimentRun>(
     `/experiment-runs/versions/${versionId}`,
     {
       method: "POST",
     },
+  );
+}
+
+export async function getExperimentRun(
+  runId: string,
+): Promise<ExperimentRun> {
+  return request<ExperimentRun>(
+    `/experiment-runs/${runId}`,
+  );
+}
+
+export async function getExperimentRuns(): Promise<
+  ExperimentRun[]
+> {
+  return request<ExperimentRun[]>(
+    "/experiment-runs",
   );
 }
 

@@ -7,13 +7,23 @@ import app.models
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import AsyncSessionLocal, engine
+from app.experiment.run_recovery import (
+    recover_orphan_experiment_runs,
+)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
+        await connection.run_sync(
+            Base.metadata.create_all
+        )
+
+    async with AsyncSessionLocal() as session:
+        await recover_orphan_experiment_runs(
+            session=session
+        )
 
     yield
 
@@ -23,11 +33,17 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    description="Plataforma experimental para evaluación de sistemas RAG.",
+    description=(
+        "Plataforma experimental para evaluación "
+        "de sistemas RAG."
+    ),
     lifespan=lifespan,
 )
 
-app.include_router(api_router, prefix="/api/v1")
+app.include_router(
+    api_router,
+    prefix="/api/v1",
+)
 
 
 @app.get("/")

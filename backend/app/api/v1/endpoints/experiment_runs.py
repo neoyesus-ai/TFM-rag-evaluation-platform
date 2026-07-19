@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     HTTPException,
     status,
@@ -13,9 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db_session
-from app.experiment.runner import (
-    execute_experiment_run,
-)
 from app.models.experiment import (
     ExperimentRun,
     ExperimentVersion,
@@ -24,6 +22,9 @@ from app.schemas.experiment_run import (
     ExperimentRunArtifactsResponse,
     ExperimentRunResponse,
     ExperimentRunResultsResponse,
+)
+from app.services.experiment_executor import (
+    execute_experiment_run_by_id,
 )
 from app.services.mlflow_results import (
     get_experiment_run_artifacts,
@@ -70,15 +71,11 @@ async def load_run_with_relations(
 )
 async def create_and_execute_run(
     version_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     session: DatabaseSession,
 ) -> ExperimentRun:
     result = await session.execute(
         select(ExperimentVersion)
-        .options(
-            selectinload(
-                ExperimentVersion.experiment
-            )
-        )
         .where(
             ExperimentVersion.id == version_id
         )
@@ -95,8 +92,6 @@ async def create_and_execute_run(
             ),
         )
 
-    experiment = version.experiment
-
     run = ExperimentRun(
         experiment_version_id=version.id,
         status="pending",
@@ -106,12 +101,12 @@ async def create_and_execute_run(
     await session.commit()
     await session.refresh(run)
 
-    return await execute_experiment_run(
-        session=session,
-        experiment=experiment,
-        version=version,
-        run=run,
+    background_tasks.add_task(
+        execute_experiment_run_by_id,
+        run.id,
     )
+
+    return run
 
 
 @router.get(

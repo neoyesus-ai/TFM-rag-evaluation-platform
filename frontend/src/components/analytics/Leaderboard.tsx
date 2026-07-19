@@ -1,9 +1,31 @@
+import {
+  useMemo,
+  useState,
+} from "react";
+
 import type {
   AnalyticsSummary,
 } from "../../types/analytics";
 
 type LeaderboardProps = {
   summaries: AnalyticsSummary[];
+};
+
+type RankingMetric =
+  | "recommendation_score"
+  | "overall_score"
+  | "groundedness"
+  | "answer_f1";
+
+const metricLabels: Record<
+  RankingMetric,
+  string
+> = {
+  recommendation_score:
+    "Recommendation Score",
+  overall_score: "Overall Score",
+  groundedness: "Groundedness",
+  answer_f1: "Answer F1",
 };
 
 function formatScore(
@@ -19,17 +41,31 @@ function formatScore(
 function Leaderboard({
   summaries,
 }: LeaderboardProps) {
-  const entries = [...summaries]
-    .filter(
-      (summary) =>
-        summary.recommendation_score !== null,
-    )
-    .sort(
-      (left, right) =>
-        (right.recommendation_score ?? 0) -
-        (left.recommendation_score ?? 0),
-    )
-    .slice(0, 5);
+  const [
+    rankingMetric,
+    setRankingMetric,
+  ] = useState<RankingMetric>(
+    "recommendation_score",
+  );
+
+  const entries = useMemo(
+    () =>
+      [...summaries]
+        .filter(
+          (summary) =>
+            summary[rankingMetric] !== null,
+        )
+        .sort(
+          (left, right) =>
+            (right[rankingMetric] ?? 0) -
+            (left[rankingMetric] ?? 0),
+        )
+        .slice(0, 10),
+    [rankingMetric, summaries],
+  );
+
+  let previousScore: number | null = null;
+  let previousPosition = 0;
 
   return (
     <section className="panel analytics-leaderboard">
@@ -38,76 +74,159 @@ function Leaderboard({
           <h2>Leaderboard</h2>
 
           <p>
-            Mejores ejecuciones por puntuación
-            de recomendación.
+            Mejores ejecuciones según la
+            métrica seleccionada.
           </p>
         </div>
+
+        <label>
+          Ordenar por
+
+          <select
+            value={rankingMetric}
+            onChange={(event) =>
+              setRankingMetric(
+                event.target
+                  .value as RankingMetric,
+              )
+            }
+          >
+            {Object.entries(
+              metricLabels,
+            ).map(([key, label]) => (
+              <option
+                key={key}
+                value={key}
+              >
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="analytics-leaderboard-list">
         {entries.map(
-          (entry, index) => (
-            <article
-              className="analytics-leaderboard-row"
-              key={entry.run_id}
-            >
-              <div className="analytics-rank">
-                {index + 1}
-              </div>
+          (entry, index) => {
+            const currentScore =
+              entry[rankingMetric];
 
-              <div className="analytics-leaderboard-main">
-                <strong>
-                  {entry.experiment_name}
-                </strong>
+            const position =
+              currentScore === previousScore
+                ? previousPosition
+                : index + 1;
 
-                <span>
-                  v{entry.experiment_version}
-                  {" · "}
-                  {entry.generation_model ??
-                    "Modelo no definido"}
-                </span>
-              </div>
+            previousScore = currentScore;
+            previousPosition = position;
 
-              <div className="analytics-leaderboard-config">
-                <span>
-                  Chunk{" "}
-                  {entry.chunk_size ?? "—"}
-                </span>
-
-                <span>
-                  Top-K{" "}
-                  {entry.retrieval_top_k ?? "—"}
-                </span>
-              </div>
-
-              <div className="analytics-leaderboard-metrics">
-                <div>
-                  <span>Recommendation</span>
-                  <strong>
-                    {formatScore(
-                      entry.recommendation_score,
-                    )}
-                  </strong>
+            return (
+              <article
+                className="analytics-leaderboard-row"
+                key={entry.run_id}
+              >
+                <div className="analytics-rank">
+                  {position}
                 </div>
 
-                <div>
-                  <span>Overall</span>
+                <div className="analytics-leaderboard-main">
                   <strong>
-                    {formatScore(
-                      entry.overall_score,
-                    )}
+                    {entry.experiment_name}
                   </strong>
+
+                  <span>
+                    v
+                    {
+                      entry.experiment_version
+                    }
+                    {" · "}
+                    {entry.generation_model ??
+                      "Modelo no definido"}
+                  </span>
+
+                  <small>
+                    {entry.embedding_model ??
+                      "Embedding no definido"}
+                  </small>
                 </div>
-              </div>
-            </article>
-          ),
+
+                <div className="analytics-leaderboard-config">
+                  <span>
+                    Chunk{" "}
+                    {entry.chunk_size ?? "—"}
+                  </span>
+
+                  <span>
+                    Overlap{" "}
+                    {entry.chunk_overlap ??
+                      "—"}
+                  </span>
+
+                  <span>
+                    Top-K{" "}
+                    {entry.retrieval_top_k ??
+                      "—"}
+                  </span>
+                </div>
+
+                <div className="analytics-leaderboard-metrics">
+                  <div>
+                    <span>
+                      {
+                        metricLabels[
+                          rankingMetric
+                        ]
+                      }
+                    </span>
+
+                    <strong>
+                      {formatScore(
+                        currentScore,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Overall</span>
+
+                    <strong>
+                      {formatScore(
+                        entry.overall_score,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      Groundedness
+                    </span>
+
+                    <strong>
+                      {formatScore(
+                        entry.groundedness,
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Answer F1</span>
+
+                    <strong>
+                      {formatScore(
+                        entry.answer_f1,
+                      )}
+                    </strong>
+                  </div>
+                </div>
+              </article>
+            );
+          },
         )}
 
         {entries.length === 0 && (
           <p className="empty-message">
-            Todavía no hay ejecuciones analíticas
-            suficientes para generar el
-            leaderboard.
+            No existen ejecuciones con
+            resultados para la métrica
+            seleccionada.
           </p>
         )}
       </div>

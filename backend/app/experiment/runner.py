@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import tempfile
@@ -32,6 +33,13 @@ from app.models.experiment import (
 
 
 logger = logging.getLogger(__name__)
+
+
+# La API fluida de MLflow mantiene la ejecución activa asociada al
+# proceso/hilo. Varias tareas asíncronas de FastAPI pueden compartir ese
+# estado y provocar el error "Run ... is already active". Este bloqueo
+# serializa la sección completa de seguimiento de cada experimento.
+_MLFLOW_RUN_LOCK = asyncio.Lock()
 
 
 def flatten_configuration(
@@ -337,120 +345,151 @@ async def execute_experiment_run(
     await session.refresh(run)
 
     try:
-        mlflow.set_tracking_uri(
-            settings.mlflow_tracking_uri
-        )
+        async with _MLFLOW_RUN_LOCK:
+            # Con el bloqueo adquirido no puede existir otra ejecución
+            # legítima iniciada por este runner. Si MLflow conserva una
+            # ejecución activa, se considera residual y se cierra antes
+            # de iniciar la nueva.
+            stale_run = mlflow.active_run()
 
-        mlflow.set_experiment(
-            settings.mlflow_experiment_name
-        )
-
-        tags = {
-            "project": (
-                "TFM-rag-evaluation-platform"
-            ),
-            "run_type": "experiment",
-            "environment": (
-                settings.environment
-            ),
-            "experiment_id": str(
-                experiment.id
-            ),
-            "experiment_version_id": str(
-                version.id
-            ),
-            "experiment_version": str(
-                version.version_number
-            ),
-            "configuration_hash": (
-                version.configuration_hash
-            ),
-            "source_template_key": (
-                version.source_template_key
-                or ""
-            ),
-            "git_commit": (
-                version.git_commit
-                or ""
-            ),
-            "dataset_id": (
-                str(experiment.dataset_id)
-                if experiment.dataset_id
-                else ""
-            ),
-        }
-
-        run_name = (
-            f"{experiment.name}"
-            f"-v{version.version_number}"
-        )
-
-        with mlflow.start_run(
-            run_name=run_name,
-            tags=tags,
-        ) as active_mlflow_run:
-            run.mlflow_run_id = (
-                active_mlflow_run.info.run_id
-            )
-
-            await session.commit()
-            await session.refresh(run)
-
-            parameters = (
-                flatten_configuration(
-                    version.configuration
+            if stale_run is not None:
+                logger.warning(
+                    "Cerrando la ejecución residual de MLflow %s "
+                    "antes de iniciar el run %s.",
+                    stale_run.info.run_id,
+                    run.id,
                 )
-            )
+                mlflow.end_run(status="KILLED")
 
-            if parameters:
-                mlflow.log_params(
-                    parameters
+            try:
+                mlflow.set_tracking_uri(
+                    settings.mlflow_tracking_uri
                 )
 
-            with tempfile.TemporaryDirectory() as temp:
-                context = ExperimentContext(
-                    experiment=experiment,
-                    version=version,
-                    run=run,
-                    working_directory=Path(
-                        temp
+                mlflow.set_experiment(
+                    settings.mlflow_experiment_name
+                )
+
+                tags = {
+                    "project": (
+                        "TFM-rag-evaluation-platform"
                     ),
+                    "run_type": "experiment",
+                    "environment": (
+                        settings.environment
+                    ),
+                    "experiment_id": str(
+                        experiment.id
+                    ),
+                    "experiment_version_id": str(
+                        version.id
+                    ),
+                    "experiment_version": str(
+                        version.version_number
+                    ),
+                    "configuration_hash": (
+                        version.configuration_hash
+                    ),
+                    "source_template_key": (
+                        version.source_template_key
+                        or ""
+                    ),
+                    "git_commit": (
+                        version.git_commit
+                        or ""
+                    ),
+                    "dataset_id": (
+                        str(experiment.dataset_id)
+                        if experiment.dataset_id
+                        else ""
+                    ),
+                }
+
+                run_name = (
+                    f"{experiment.name}"
+                    f"-v{version.version_number}"
                 )
 
-                create_configuration_artifact(
-                    context
-                )
-
-                pipeline = build_pipeline(
-                    session=session
-                )
-
-                await execute_pipeline(
-                    context=context,
-                    pipeline=pipeline,
-                )
-
-                context.metrics[
-                    "runner_total_ms"
-                ] = float(
-                    int(
-                        (
-                            time.perf_counter()
-                            - started_monotonic
-                        )
-                        * 1000
+                with mlflow.start_run(
+                    run_name=run_name,
+                    tags=tags,
+                ) as active_mlflow_run:
+                    run.mlflow_run_id = (
+                        active_mlflow_run.info.run_id
                     )
-                )
 
-                create_pipeline_manifest(
-                    context
-                )
+                    await session.commit()
+                    await session.refresh(run)
 
-                log_context_to_mlflow(
-                    context
-                )
+                    parameters = (
+                        flatten_configuration(
+                            version.configuration
+                        )
+                    )
 
-                completed_context = context
+                    if parameters:
+                        mlflow.log_params(
+                            parameters
+                        )
+
+                    with tempfile.TemporaryDirectory() as temp:
+                        context = ExperimentContext(
+                            experiment=experiment,
+                            version=version,
+                            run=run,
+                            working_directory=Path(
+                                temp
+                            ),
+                        )
+
+                        create_configuration_artifact(
+                            context
+                        )
+
+                        pipeline = build_pipeline(
+                            session=session
+                        )
+
+                        await execute_pipeline(
+                            context=context,
+                            pipeline=pipeline,
+                        )
+
+                        context.metrics[
+                            "runner_total_ms"
+                        ] = float(
+                            int(
+                                (
+                                    time.perf_counter()
+                                    - started_monotonic
+                                )
+                                * 1000
+                            )
+                        )
+
+                        create_pipeline_manifest(
+                            context
+                        )
+
+                        log_context_to_mlflow(
+                            context
+                        )
+
+                        completed_context = context
+            finally:
+                # El context manager de MLflow debe cerrar la ejecución.
+                # Esta defensa evita que una excepción inesperada deje el
+                # estado global contaminado para la siguiente solicitud.
+                remaining_run = mlflow.active_run()
+
+                if remaining_run is not None:
+                    logger.warning(
+                        "Cerrando la ejecución de MLflow %s que permanecía "
+                        "activa al finalizar el run %s.",
+                        remaining_run.info.run_id,
+                        run.id,
+                    )
+                    mlflow.end_run(status="KILLED")
 
         run.status = "completed"
         run.finished_at = datetime.now(

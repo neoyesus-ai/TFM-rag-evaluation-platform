@@ -1,255 +1,100 @@
 import json
-import re
+import logging
+import math
 import statistics
 import time
-import unicodedata
-from collections import Counter
 from typing import Any
 
+from app.evaluators.lexical import LexicalEvaluator
+from app.evaluators.ragas import RagasEvaluator
 from app.experiment.context import ExperimentContext
 from app.experiment.stages.base import ExperimentStage
 
 
-def normalize_text(value: str | None) -> str:
-    if not value:
-        return ""
-
-    normalized = unicodedata.normalize(
-        "NFKD",
-        value.lower(),
-    )
-
-    without_accents = "".join(
-        character
-        for character in normalized
-        if not unicodedata.combining(character)
-    )
-
-    without_punctuation = re.sub(
-        r"[^a-z0-9\s]",
-        " ",
-        without_accents,
-    )
-
-    return " ".join(
-        without_punctuation.split()
-    )
-
-
-def tokenize(value: str | None) -> list[str]:
-    normalized = normalize_text(value)
-
-    if not normalized:
-        return []
-
-    return normalized.split()
-
-
-def exact_match(
-    generated_answer: str,
-    expected_answer: str | None,
-) -> float | None:
-    if not expected_answer:
-        return None
-
-    return float(
-        normalize_text(generated_answer)
-        == normalize_text(expected_answer)
-    )
-
-
-def token_precision_recall_f1(
-    prediction: str | None,
-    reference: str | None,
-) -> tuple[float, float, float]:
-    prediction_tokens = tokenize(prediction)
-    reference_tokens = tokenize(reference)
-
-    if not prediction_tokens or not reference_tokens:
-        return 0.0, 0.0, 0.0
-
-    prediction_counter = Counter(prediction_tokens)
-    reference_counter = Counter(reference_tokens)
-
-    common_tokens = sum(
-        (
-            prediction_counter
-            & reference_counter
-        ).values()
-    )
-
-    precision = common_tokens / len(
-        prediction_tokens
-    )
-
-    recall = common_tokens / len(
-        reference_tokens
-    )
-
-    if precision + recall == 0:
-        f1 = 0.0
-    else:
-        f1 = (
-            2
-            * precision
-            * recall
-            / (precision + recall)
-        )
-
-    return precision, recall, f1
-
-
-def calculate_answer_relevancy(
-    question: str,
-    generated_answer: str,
-) -> float:
-    _, _, score = token_precision_recall_f1(
-        prediction=generated_answer,
-        reference=question,
-    )
-
-    return score
-
-
-def calculate_groundedness_proxy(
-    generated_answer: str,
-    retrieved_contexts: list[dict[str, Any]],
-) -> float:
-    generated_tokens = tokenize(
-        generated_answer
-    )
-
-    if not generated_tokens:
-        return 0.0
-
-    context_tokens: set[str] = set()
-
-    for context in retrieved_contexts:
-        context_tokens.update(
-            tokenize(
-                str(context.get("text") or "")
-            )
-        )
-
-    if not context_tokens:
-        return 0.0
-
-    supported_tokens = sum(
-        token in context_tokens
-        for token in generated_tokens
-    )
-
-    return supported_tokens / len(
-        generated_tokens
-    )
-
-
-def calculate_context_recall(
-    expected_contexts: list[str] | None,
-    retrieved_contexts: list[dict[str, Any]],
-) -> float | None:
-    if not expected_contexts:
-        return None
-
-    retrieved_texts = [
-        str(context.get("text") or "")
-        for context in retrieved_contexts
-    ]
-
-    if not retrieved_texts:
-        return 0.0
-
-    expected_scores: list[float] = []
-
-    for expected_context in expected_contexts:
-        best_recall = 0.0
-
-        for retrieved_text in retrieved_texts:
-            _, recall, _ = (
-                token_precision_recall_f1(
-                    prediction=retrieved_text,
-                    reference=expected_context,
-                )
-            )
-
-            best_recall = max(
-                best_recall,
-                recall,
-            )
-
-        expected_scores.append(best_recall)
-
-    return statistics.mean(
-        expected_scores
-    )
-
-
-def calculate_context_precision(
-    expected_answer: str | None,
-    expected_contexts: list[str] | None,
-    retrieved_contexts: list[dict[str, Any]],
-) -> float | None:
-    references = list(
-        expected_contexts or []
-    )
-
-    if expected_answer:
-        references.append(expected_answer)
-
-    if not references:
-        return None
-
-    if not retrieved_contexts:
-        return 0.0
-
-    relevant_context_count = 0
-
-    for context in retrieved_contexts:
-        context_text = str(
-            context.get("text") or ""
-        )
-
-        best_f1 = 0.0
-
-        for reference in references:
-            _, _, f1 = (
-                token_precision_recall_f1(
-                    prediction=context_text,
-                    reference=reference,
-                )
-            )
-
-            best_f1 = max(
-                best_f1,
-                f1,
-            )
-
-        if best_f1 >= 0.10:
-            relevant_context_count += 1
-
-    return (
-        relevant_context_count
-        / len(retrieved_contexts)
-    )
+logger = logging.getLogger(__name__)
 
 
 def mean_available(
     values: list[float | None],
-) -> float:
-    available = [
-        value
-        for value in values
-        if value is not None
-    ]
+) -> float | None:
+    """
+    Calcula la media ignorando valores None, NaN e infinitos.
+    """
+    available: list[float] = []
+
+    for value in values:
+        if value is None:
+            continue
+
+        converted = float(value)
+
+        if math.isfinite(converted):
+            available.append(converted)
 
     if not available:
-        return 0.0
+        return None
 
     return statistics.mean(available)
 
 
+def calculate_overall_score(
+    metrics: dict[str, float | None],
+) -> float:
+    """
+    Calcula una puntuación global por muestra.
+
+    Se priorizan las métricas semánticas de RAGAS cuando están
+    disponibles. Cuando una métrica RAGAS no puede calcularse,
+    se utiliza su equivalente léxico o proxy.
+    """
+    answer_relevancy = (
+        metrics.get("ragas_answer_relevancy")
+        if metrics.get("ragas_answer_relevancy")
+        is not None
+        else metrics.get("answer_relevancy")
+    )
+
+    groundedness = (
+        metrics.get("ragas_faithfulness")
+        if metrics.get("ragas_faithfulness")
+        is not None
+        else metrics.get("groundedness_proxy")
+    )
+
+    context_precision = (
+        metrics.get("ragas_context_precision")
+        if metrics.get("ragas_context_precision")
+        is not None
+        else metrics.get("context_precision")
+    )
+
+    context_recall = (
+        metrics.get("ragas_context_recall")
+        if metrics.get("ragas_context_recall")
+        is not None
+        else metrics.get("context_recall")
+    )
+
+    overall = mean_available(
+        [
+            metrics.get("exact_match"),
+            metrics.get("answer_f1"),
+            answer_relevancy,
+            groundedness,
+            context_precision,
+            context_recall,
+        ]
+    )
+
+    return overall if overall is not None else 0.0
+
+
 class EvaluationStage(ExperimentStage):
     name = "evaluation"
+
+    def __init__(self) -> None:
+        self.lexical_evaluator = LexicalEvaluator()
+        self.ragas_evaluator = RagasEvaluator()
 
     async def execute(
         self,
@@ -257,240 +102,184 @@ class EvaluationStage(ExperimentStage):
     ) -> None:
         if not context.generation_results:
             raise ValueError(
-                "No existen respuestas generadas "
-                "para evaluar."
+                "No existen respuestas generadas para evaluar."
             )
 
-        evaluation_started = (
-            time.perf_counter()
-        )
+        evaluation_started = time.perf_counter()
 
         evaluation_results: list[
             dict[str, Any]
         ] = []
 
-        exact_match_scores: list[float] = []
-        answer_precision_scores: list[
-            float
-        ] = []
-        answer_recall_scores: list[
-            float
-        ] = []
-        answer_f1_scores: list[float] = []
-        answer_relevancy_scores: list[
-            float
-        ] = []
-        groundedness_scores: list[float] = []
-        context_precision_scores: list[
-            float
-        ] = []
-        context_recall_scores: list[
-            float
-        ] = []
-        overall_scores: list[float] = []
+        metric_values: dict[
+            str,
+            list[float]
+        ] = {}
+
+        ragas_success_count = 0
+        ragas_failure_count = 0
 
         for result in context.generation_results:
-            generated_answer = str(
-                result.get(
-                    "generated_answer"
-                )
-                or ""
-            )
-
-            expected_answer = result.get(
-                "expected_answer"
-            )
-
-            expected_contexts = result.get(
-                "expected_contexts"
-            )
-
-            retrieved_contexts = list(
-                result.get(
-                    "retrieved_contexts"
-                )
-                or []
-            )
-
-            current_exact_match = (
-                exact_match(
-                    generated_answer=(
-                        generated_answer
-                    ),
-                    expected_answer=(
-                        expected_answer
-                    ),
+            lexical_metrics = (
+                await self.lexical_evaluator.evaluate(
+                    result
                 )
             )
 
-            (
-                answer_precision,
-                answer_recall,
-                answer_f1,
-            ) = token_precision_recall_f1(
-                prediction=generated_answer,
-                reference=expected_answer,
+            try:
+                ragas_metrics = (
+                    await self.ragas_evaluator.evaluate(
+                        result
+                    )
+                )
+
+                ragas_success_count += 1
+
+            except Exception as exc:
+                ragas_failure_count += 1
+
+                logger.exception(
+                    "La evaluación RAGAS falló para "
+                    "la pregunta %s: %s",
+                    result.get("question_id"),
+                    exc,
+                )
+
+                ragas_metrics = {
+                    "ragas_faithfulness": None,
+                    "ragas_answer_relevancy": None,
+                    "ragas_context_precision": None,
+                    "ragas_context_recall": None,
+                }
+
+            combined_metrics: dict[
+                str,
+                float | None
+            ] = {
+                **lexical_metrics,
+                **ragas_metrics,
+            }
+
+            overall_score = calculate_overall_score(
+                combined_metrics
             )
 
-            answer_relevancy = (
-                calculate_answer_relevancy(
-                    question=str(
-                        result.get(
-                            "question"
-                        )
-                        or ""
-                    ),
-                    generated_answer=(
-                        generated_answer
-                    ),
-                )
-            )
+            combined_metrics[
+                "overall_score"
+            ] = overall_score
 
-            groundedness_proxy = (
-                calculate_groundedness_proxy(
-                    generated_answer=(
-                        generated_answer
-                    ),
-                    retrieved_contexts=(
-                        retrieved_contexts
-                    ),
-                )
-            )
+            # Conservamos los nombres públicos anteriores para no
+            # romper consumidores, API, MLflow ni artefactos.
+            public_metrics: dict[
+                str,
+                float | None
+            ] = {
+                "exact_match": combined_metrics.get(
+                    "exact_match"
+                ),
+                "answer_token_precision": (
+                    combined_metrics.get(
+                        "answer_precision"
+                    )
+                ),
+                "answer_token_recall": (
+                    combined_metrics.get(
+                        "answer_recall"
+                    )
+                ),
+                "answer_token_f1": (
+                    combined_metrics.get(
+                        "answer_f1"
+                    )
+                ),
+                "answer_relevancy_proxy": (
+                    combined_metrics.get(
+                        "answer_relevancy"
+                    )
+                ),
+                "groundedness_proxy": (
+                    combined_metrics.get(
+                        "groundedness_proxy"
+                    )
+                ),
+                "context_precision_proxy": (
+                    combined_metrics.get(
+                        "context_precision"
+                    )
+                ),
+                "context_recall_proxy": (
+                    combined_metrics.get(
+                        "context_recall"
+                    )
+                ),
+                "ragas_faithfulness": (
+                    combined_metrics.get(
+                        "ragas_faithfulness"
+                    )
+                ),
+                "ragas_answer_relevancy": (
+                    combined_metrics.get(
+                        "ragas_answer_relevancy"
+                    )
+                ),
+                "ragas_context_precision": (
+                    combined_metrics.get(
+                        "ragas_context_precision"
+                    )
+                ),
+                "ragas_context_recall": (
+                    combined_metrics.get(
+                        "ragas_context_recall"
+                    )
+                ),
+                "overall_score": overall_score,
+            }
 
-            context_precision = (
-                calculate_context_precision(
-                    expected_answer=(
-                        expected_answer
-                    ),
-                    expected_contexts=(
-                        expected_contexts
-                    ),
-                    retrieved_contexts=(
-                        retrieved_contexts
-                    ),
-                )
-            )
+            for metric_name, metric_value in (
+                public_metrics.items()
+            ):
+                if metric_value is None:
+                    continue
 
-            context_recall = (
-                calculate_context_recall(
-                    expected_contexts=(
-                        expected_contexts
-                    ),
-                    retrieved_contexts=(
-                        retrieved_contexts
-                    ),
-                )
-            )
-
-            overall_score = mean_available(
-                [
-                    current_exact_match,
-                    answer_f1
-                    if expected_answer
-                    else None,
-                    answer_relevancy,
-                    groundedness_proxy,
-                    context_precision,
-                    context_recall,
-                ]
-            )
-
-            if current_exact_match is not None:
-                exact_match_scores.append(
-                    current_exact_match
-                )
-
-            if expected_answer:
-                answer_precision_scores.append(
-                    answer_precision
-                )
-                answer_recall_scores.append(
-                    answer_recall
-                )
-                answer_f1_scores.append(
-                    answer_f1
-                )
-
-            answer_relevancy_scores.append(
-                answer_relevancy
-            )
-
-            groundedness_scores.append(
-                groundedness_proxy
-            )
-
-            if context_precision is not None:
-                context_precision_scores.append(
-                    context_precision
+                numeric_value = float(
+                    metric_value
                 )
 
-            if context_recall is not None:
-                context_recall_scores.append(
-                    context_recall
-                )
+                if not math.isfinite(
+                    numeric_value
+                ):
+                    continue
 
-            overall_scores.append(
-                overall_score
-            )
+                metric_values.setdefault(
+                    metric_name,
+                    [],
+                ).append(numeric_value)
 
             evaluation_results.append(
                 {
-                    "question_id": result[
+                    "question_id": result.get(
                         "question_id"
-                    ],
-                    "order_index": result[
+                    ),
+                    "order_index": result.get(
                         "order_index"
-                    ],
-                    "question": result[
+                    ),
+                    "question": result.get(
                         "question"
-                    ],
-                    "expected_answer": (
-                        expected_answer
                     ),
-                    "generated_answer": (
-                        generated_answer
+                    "expected_answer": result.get(
+                        "expected_answer"
                     ),
-                    "expected_contexts": (
-                        expected_contexts
+                    "generated_answer": result.get(
+                        "generated_answer"
                     ),
-                    "retrieved_contexts": (
-                        retrieved_contexts
+                    "expected_contexts": result.get(
+                        "expected_contexts"
                     ),
-                    "metrics": {
-                        "exact_match": (
-                            current_exact_match
-                        ),
-                        "answer_token_precision": (
-                            answer_precision
-                            if expected_answer
-                            else None
-                        ),
-                        "answer_token_recall": (
-                            answer_recall
-                            if expected_answer
-                            else None
-                        ),
-                        "answer_token_f1": (
-                            answer_f1
-                            if expected_answer
-                            else None
-                        ),
-                        "answer_relevancy_proxy": (
-                            answer_relevancy
-                        ),
-                        "groundedness_proxy": (
-                            groundedness_proxy
-                        ),
-                        "context_precision_proxy": (
-                            context_precision
-                        ),
-                        "context_recall_proxy": (
-                            context_recall
-                        ),
-                        "overall_score": (
-                            overall_score
-                        ),
-                    },
+                    "retrieved_contexts": result.get(
+                        "retrieved_contexts"
+                    )
+                    or [],
+                    "metrics": public_metrics,
                     "generation": {
                         "provider": result.get(
                             "provider"
@@ -541,9 +330,22 @@ class EvaluationStage(ExperimentStage):
             / "leaderboard.json"
         )
 
-        summary = {
+        def metric_mean(
+            metric_name: str,
+        ) -> float | None:
+            values = metric_values.get(
+                metric_name,
+                [],
+            )
+
+            if not values:
+                return None
+
+            return statistics.mean(values)
+
+        summary: dict[str, Any] = {
             "evaluator": (
-                "deterministic-lexical-v1"
+                "lexical-v1+ragas-0.3.9"
             ),
             "question_count": len(
                 evaluation_results
@@ -551,89 +353,96 @@ class EvaluationStage(ExperimentStage):
             "evaluation_duration_ms": (
                 evaluation_duration_ms
             ),
-            "mean_exact_match": (
-                statistics.mean(
-                    exact_match_scores
-                )
-                if exact_match_scores
-                else None
+            "ragas_success_count": (
+                ragas_success_count
+            ),
+            "ragas_failure_count": (
+                ragas_failure_count
+            ),
+            "mean_exact_match": metric_mean(
+                "exact_match"
             ),
             "mean_answer_token_precision": (
-                statistics.mean(
-                    answer_precision_scores
+                metric_mean(
+                    "answer_token_precision"
                 )
-                if answer_precision_scores
-                else None
             ),
             "mean_answer_token_recall": (
-                statistics.mean(
-                    answer_recall_scores
+                metric_mean(
+                    "answer_token_recall"
                 )
-                if answer_recall_scores
-                else None
             ),
-            "mean_answer_token_f1": (
-                statistics.mean(
-                    answer_f1_scores
-                )
-                if answer_f1_scores
-                else None
+            "mean_answer_token_f1": metric_mean(
+                "answer_token_f1"
             ),
             "mean_answer_relevancy_proxy": (
-                statistics.mean(
-                    answer_relevancy_scores
+                metric_mean(
+                    "answer_relevancy_proxy"
                 )
-                if answer_relevancy_scores
-                else 0
             ),
             "mean_groundedness_proxy": (
-                statistics.mean(
-                    groundedness_scores
+                metric_mean(
+                    "groundedness_proxy"
                 )
-                if groundedness_scores
-                else 0
             ),
             "mean_context_precision_proxy": (
-                statistics.mean(
-                    context_precision_scores
+                metric_mean(
+                    "context_precision_proxy"
                 )
-                if context_precision_scores
-                else None
             ),
             "mean_context_recall_proxy": (
-                statistics.mean(
-                    context_recall_scores
+                metric_mean(
+                    "context_recall_proxy"
                 )
-                if context_recall_scores
-                else None
+            ),
+            "mean_ragas_faithfulness": (
+                metric_mean(
+                    "ragas_faithfulness"
+                )
+            ),
+            "mean_ragas_answer_relevancy": (
+                metric_mean(
+                    "ragas_answer_relevancy"
+                )
+            ),
+            "mean_ragas_context_precision": (
+                metric_mean(
+                    "ragas_context_precision"
+                )
+            ),
+            "mean_ragas_context_recall": (
+                metric_mean(
+                    "ragas_context_recall"
+                )
             ),
             "mean_overall_score": (
-                statistics.mean(
-                    overall_scores
+                metric_mean(
+                    "overall_score"
                 )
-                if overall_scores
-                else 0
+                or 0.0
             ),
         }
 
         leaderboard = sorted(
             [
                 {
-                    "question_id": item[
+                    "question_id": item.get(
                         "question_id"
-                    ],
-                    "question": item[
+                    ),
+                    "question": item.get(
                         "question"
-                    ],
-                    "overall_score": item[
-                        "metrics"
-                    ]["overall_score"],
+                    ),
+                    "overall_score": (
+                        item["metrics"][
+                            "overall_score"
+                        ]
+                    ),
                 }
                 for item in evaluation_results
             ],
-            key=lambda item: item[
-                "overall_score"
-            ],
+            key=lambda item: float(
+                item["overall_score"]
+            ),
             reverse=True,
         )
 
@@ -670,7 +479,15 @@ class EvaluationStage(ExperimentStage):
 
         context.metadata[
             "evaluation_evaluator"
-        ] = "deterministic-lexical-v1"
+        ] = "lexical-v1+ragas-0.3.9"
+
+        context.metadata[
+            "ragas_success_count"
+        ] = ragas_success_count
+
+        context.metadata[
+            "ragas_failure_count"
+        ] = ragas_failure_count
 
         context.artifacts[
             "evaluation"
@@ -688,74 +505,69 @@ class EvaluationStage(ExperimentStage):
             evaluation_duration_ms
         )
 
-        context.metrics[
-            "evaluation_exact_match"
-        ] = float(
-            summary["mean_exact_match"]
-            or 0
-        )
-
-        context.metrics[
-            "evaluation_answer_token_precision"
-        ] = float(
-            summary[
+        summary_to_context = {
+            "evaluation_exact_match": (
+                "mean_exact_match"
+            ),
+            "evaluation_answer_token_precision": (
                 "mean_answer_token_precision"
-            ]
-            or 0
-        )
-
-        context.metrics[
-            "evaluation_answer_token_recall"
-        ] = float(
-            summary[
+            ),
+            "evaluation_answer_token_recall": (
                 "mean_answer_token_recall"
-            ]
-            or 0
-        )
-
-        context.metrics[
-            "evaluation_answer_token_f1"
-        ] = float(
-            summary["mean_answer_token_f1"]
-            or 0
-        )
-
-        context.metrics[
-            "evaluation_answer_relevancy_proxy"
-        ] = float(
-            summary[
+            ),
+            "evaluation_answer_token_f1": (
+                "mean_answer_token_f1"
+            ),
+            "evaluation_answer_relevancy_proxy": (
                 "mean_answer_relevancy_proxy"
-            ]
-        )
-
-        context.metrics[
-            "evaluation_groundedness_proxy"
-        ] = float(
-            summary[
+            ),
+            "evaluation_groundedness_proxy": (
                 "mean_groundedness_proxy"
-            ]
-        )
-
-        context.metrics[
-            "evaluation_context_precision_proxy"
-        ] = float(
-            summary[
+            ),
+            "evaluation_context_precision_proxy": (
                 "mean_context_precision_proxy"
-            ]
-            or 0
-        )
-
-        context.metrics[
-            "evaluation_context_recall_proxy"
-        ] = float(
-            summary[
+            ),
+            "evaluation_context_recall_proxy": (
                 "mean_context_recall_proxy"
-            ]
-            or 0
+            ),
+            "evaluation_ragas_faithfulness": (
+                "mean_ragas_faithfulness"
+            ),
+            "evaluation_ragas_answer_relevancy": (
+                "mean_ragas_answer_relevancy"
+            ),
+            "evaluation_ragas_context_precision": (
+                "mean_ragas_context_precision"
+            ),
+            "evaluation_ragas_context_recall": (
+                "mean_ragas_context_recall"
+            ),
+            "evaluation_overall_score": (
+                "mean_overall_score"
+            ),
+        }
+
+        for (
+            context_metric_name,
+            summary_metric_name,
+        ) in summary_to_context.items():
+            context.metrics[
+                context_metric_name
+            ] = float(
+                summary.get(
+                    summary_metric_name
+                )
+                or 0.0
+            )
+
+        context.metrics[
+            "evaluation_ragas_success_count"
+        ] = float(
+            ragas_success_count
         )
 
         context.metrics[
-            "evaluation_overall_score"
+            "evaluation_ragas_failure_count"
         ] = float(
-            summary["mean_overall_score"]
+            ragas_failure_count
         )

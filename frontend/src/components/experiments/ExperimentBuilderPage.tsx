@@ -347,29 +347,15 @@ function ExperimentBuilderPage({
           );
         }
 
-        setNotice(
-          "Experimento creado. "
-            + "La ejecución está en curso "
-            + "y puede tardar alrededor "
-            + "de un minuto.",
-        );
-
         const run =
           await createExperimentRun(
             firstVersion.id,
           );
 
         setNotice(
-          run.status === "completed"
-            ? (
-                "Experimento creado y "
-                + "ejecutado correctamente."
-              )
-            : (
-                "Experimento creado. "
-                + `La ejecución terminó `
-                + `con estado ${run.status}.`
-              ),
+          "Experimento creado correctamente. "
+            + "La ejecución se ha iniciado "
+            + `con estado ${run.status}.`,
         );
 
         onOpenRuns?.();

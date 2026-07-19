@@ -1,39 +1,42 @@
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
-python-dotenv
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
 
-langchain
-langchain-community
-langchain-text-splitters
+pydantic==2.11.7
+pydantic-settings==2.11.0
+python-dotenv==1.1.1
 
-chromadb
+langchain==0.3.27
+langchain-core==0.3.80
+langchain-community==0.3.27
+langchain-openai==0.3.35
+langchain-text-splitters==0.3.11
 
-ollama
+ragas==0.3.9
 
-mlflow
+chromadb==1.0.20
 
-ragas
+ollama==0.6.2
 
-psycopg[binary]
+mlflow==3.3.2
 
-sqlalchemy
+psycopg[binary]==3.2.10
 
-httpx
+sqlalchemy==2.0.51
 
-python-multipart
+httpx==0.28.1
 
-minio
+python-multipart==0.0.20
+
+minio==7.2.18
 
 PyYAML==6.0.2
 
-numpy
+numpy==2.3.2
 
-alembic==1.18.5
+alembic==1.18.0
 
-PyJWT
-pwdlib[argon2]
+PyJWT==2.10.1
+pwdlib[argon2]==0.3.0
 
-pypdf
-python-docx
+pypdf==6.1.1
+python-docx==1.2.0
