@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 
+import DatasetsPage from "./pages/DatasetsPage";
 import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
 import CorporaPage from "./pages/CorporaPage";
 import AnalyticsPage from "./components/analytics/AnalyticsPage";
