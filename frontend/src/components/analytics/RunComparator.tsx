@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -157,29 +156,11 @@ function RunComparator({
     setRightRunId,
   ] = useState("");
 
-  useEffect(() => {
-    if (
-      availableRuns.length > 0 &&
-      !leftRunId
-    ) {
-      setLeftRunId(
-        availableRuns[0].run_id,
-      );
-    }
+  const [
+    comparisonReady,
+    setComparisonReady,
+  ] = useState(false);
 
-    if (
-      availableRuns.length > 1 &&
-      !rightRunId
-    ) {
-      setRightRunId(
-        availableRuns[1].run_id,
-      );
-    }
-  }, [
-    availableRuns,
-    leftRunId,
-    rightRunId,
-  ]);
 
   const leftRun =
     availableRuns.find(
@@ -349,12 +330,17 @@ function RunComparator({
 
           <select
             value={leftRunId}
-            onChange={(event) =>
+            onChange={(event) => {
               setLeftRunId(
                 event.target.value,
-              )
-            }
+              );
+              setComparisonReady(false);
+            }}
           >
+            <option value="">
+              Seleccione una ejecución...
+            </option>
+
             {availableRuns.map(
               (summary) => (
                 <option
@@ -383,12 +369,17 @@ function RunComparator({
 
           <select
             value={rightRunId}
-            onChange={(event) =>
+            onChange={(event) => {
               setRightRunId(
                 event.target.value,
-              )
-            }
+              );
+              setComparisonReady(false);
+            }}
           >
+            <option value="">
+              Seleccione una ejecución...
+            </option>
+
             {availableRuns.map(
               (summary) => (
                 <option
@@ -409,7 +400,26 @@ function RunComparator({
         </label>
       </div>
 
-      {leftRun && rightRun && (
+      <div className="analytics-comparator-actions">
+        <button
+          className="primary-button"
+          type="button"
+          disabled={
+            !leftRunId ||
+            !rightRunId ||
+            leftRunId === rightRunId
+          }
+          onClick={() =>
+            setComparisonReady(true)
+          }
+        >
+          Comparar
+        </button>
+      </div>
+
+      {comparisonReady &&
+        leftRun &&
+        rightRun && (
         <>
           <div className="analytics-comparator-summary">
             <article
