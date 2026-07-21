@@ -94,6 +94,22 @@ services:
       retries: 20
     networks:
       - tfm_net
+  
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: tfm-open-webui
+    restart: unless-stopped
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - open_webui_data:/app/backend/data
+    ports:
+      - "${OPEN_WEBUI_PORT}:8080"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - tfm_net
 
   chroma:
     image: chromadb/chroma:latest
@@ -305,3 +321,6 @@ volumes:
 
   frontend_node_modules:
     name: tfm-frontend-node-modules
+
+  open_webui_data:
+    name: tfm-open-webui-data

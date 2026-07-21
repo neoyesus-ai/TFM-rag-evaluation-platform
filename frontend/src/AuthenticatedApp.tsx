@@ -1827,6 +1827,48 @@ function App() {
               interactiva.
             </p>
           </a>
+
+           <a
+              className="service-card"
+              href={`${window.location.protocol}//${window.location.hostname}:11434`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>Model serving</span>
+              <h2>Ollama</h2>
+              <p>
+                Servicio de modelos generativos y
+                modelos de embeddings.
+              </p>
+            </a>
+
+           <a
+              className="service-card"
+              href={`${window.location.protocol}//${window.location.hostname}:8001`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>Vector database</span>
+              <h2>ChromaDB</h2>
+              <p>
+                Colecciones vectoriales, embeddings
+                y fragmentos indexados.
+              </p>
+            </a>
+
+          <a
+              className="service-card"
+              href={`${window.location.protocol}//${window.location.hostname}:3001`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span>Gestión de modelos</span>
+              <h2>Open WebUI</h2>
+              <p>
+                Instalación, administración y prueba
+                de modelos disponibles en Ollama.
+              </p>
+            </a>
         </section>
       </>
     );
