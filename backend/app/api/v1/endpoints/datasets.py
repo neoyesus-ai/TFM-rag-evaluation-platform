@@ -20,6 +20,7 @@ from app.models.dataset import (
 )
 from app.schemas.dataset import (
     EvaluationDatasetCreate,
+    EvaluationDatasetGenerateRequest,
     EvaluationDatasetResponse,
     EvaluationDatasetStatusUpdate,
     EvaluationDatasetSummaryResponse,
@@ -28,6 +29,9 @@ from app.schemas.dataset import (
     EvaluationQuestionResponse,
     EvaluationQuestionUpdate,
 )
+
+
+from app.services.dataset_generation import generate_dataset_from_corpus
 
 
 router = APIRouter(
@@ -240,6 +244,21 @@ async def list_datasets(
         for dataset, question_count
         in result.all()
     ]
+
+
+@router.post(
+    "/generate-from-corpus",
+    response_model=EvaluationDatasetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_dataset(
+    payload: EvaluationDatasetGenerateRequest,
+    session: DatabaseSession,
+) -> EvaluationDataset:
+    return await generate_dataset_from_corpus(
+        payload=payload,
+        session=session,
+    )
 
 
 @router.get(

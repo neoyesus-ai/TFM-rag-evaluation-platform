@@ -66,6 +66,21 @@ export type DatasetCreate = {
   questions: DatasetQuestionCreate[];
 };
 
+export type GenerateDatasetFromCorpusPayload = {
+  corpusId: string;
+  name: string;
+  description: string;
+  version: number;
+  provider: "ollama";
+  model: string;
+  language: "es" | "en";
+  questionsPerDocument: number;
+  chunkingStrategy: "fixed" | "recursive";
+  chunkSize: number;
+  chunkOverlap: number;
+  temperature: number;
+};
+
 export type DatasetUpdate = {
   name?: string;
   description?: string;
@@ -306,6 +321,37 @@ export async function createDataset(
           payload.questions.map(
             serializeQuestionCreate,
           ),
+      }),
+    },
+  );
+}
+
+export async function generateDatasetFromCorpus(
+  payload: GenerateDatasetFromCorpusPayload,
+): Promise<DatasetDetail> {
+  return request<DatasetDetail>(
+    "/datasets/generate-from-corpus",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        corpus_id: payload.corpusId,
+        name: payload.name.trim(),
+        description:
+          payload.description.trim() ||
+          null,
+        version: payload.version,
+        provider: payload.provider,
+        model: payload.model.trim(),
+        language: payload.language,
+        questions_per_document:
+          payload.questionsPerDocument,
+        chunking_strategy:
+          payload.chunkingStrategy,
+        chunk_size: payload.chunkSize,
+        chunk_overlap:
+          payload.chunkOverlap,
+        temperature:
+          payload.temperature,
       }),
     },
   );
