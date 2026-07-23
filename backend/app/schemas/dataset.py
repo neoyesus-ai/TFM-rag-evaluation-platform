@@ -202,3 +202,77 @@ class EvaluationDatasetStatusUpdate(BaseModel):
     status: str = Field(
         pattern="^(draft|ready|archived)$",
     )
+
+
+class EvaluationDatasetGenerateRequest(BaseModel):
+    corpus_id: uuid.UUID
+
+    name: str = Field(
+        min_length=3,
+        max_length=200,
+    )
+
+    description: str | None = Field(
+        default=None,
+        max_length=5000,
+    )
+
+    version: int = Field(
+        default=1,
+        ge=1,
+    )
+
+    provider: str = Field(
+        default="ollama",
+        pattern="^ollama$",
+    )
+
+    model: str = Field(
+        min_length=1,
+        max_length=200,
+    )
+
+    language: str = Field(
+        default="es",
+        pattern="^(es|en)$",
+    )
+
+    questions_per_document: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+    )
+
+    chunking_strategy: str = Field(
+        default="recursive",
+        pattern="^(fixed|recursive)$",
+    )
+
+    chunk_size: int = Field(
+        default=1500,
+        ge=300,
+        le=10000,
+    )
+
+    chunk_overlap: int = Field(
+        default=200,
+        ge=0,
+        le=5000,
+    )
+
+    temperature: float = Field(
+        default=0.2,
+        ge=0.0,
+        le=2.0,
+    )
+
+    @model_validator(mode="after")
+    def validate_chunking_configuration(
+        self,
+    ) -> "EvaluationDatasetGenerateRequest":
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                "chunk_overlap debe ser menor que chunk_size."
+            )
+
+        return self
