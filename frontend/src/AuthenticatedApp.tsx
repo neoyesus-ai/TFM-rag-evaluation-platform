@@ -7,6 +7,10 @@ import {
 } from "react";
 
 import DatasetsPage from "./pages/DatasetsPage";
+import {
+  generateDatasetFromCorpus,
+  type GenerateDatasetFromCorpusPayload,
+} from "./services/datasets";
 import ExperimentBuilderPage from "./components/experiments/ExperimentBuilderPage";
 import CorporaPage from "./pages/CorporaPage";
 import AnalyticsPage from "./components/analytics/AnalyticsPage";
@@ -102,6 +106,9 @@ type DatasetForm = {
   expectedAnswer: string;
 };
 
+type DatasetGenerationForm =
+  GenerateDatasetFromCorpusPayload;
+
 const API_BASE = "/api/v1";
 
 const EMPTY_DATASET_FORM: DatasetForm = {
@@ -110,6 +117,22 @@ const EMPTY_DATASET_FORM: DatasetForm = {
   question: "",
   expectedAnswer: "",
 };
+
+const EMPTY_DATASET_GENERATION_FORM:
+  DatasetGenerationForm = {
+    corpusId: "",
+    name: "",
+    description: "",
+    version: 1,
+    provider: "ollama",
+    model: "llama3.1",
+    language: "es",
+    questionsPerDocument: 3,
+    chunkingStrategy: "recursive",
+    chunkSize: 1500,
+    chunkOverlap: 200,
+    temperature: 0.2,
+  };
 
 function formatDate(
   value: string | null,
@@ -338,6 +361,13 @@ function App() {
     useState<DatasetForm>(
       EMPTY_DATASET_FORM,
     );
+
+  const [
+    datasetGenerationForm,
+    setDatasetGenerationForm,
+  ] = useState<DatasetGenerationForm>(
+    EMPTY_DATASET_GENERATION_FORM,
+  );
 
   const [loading, setLoading] =
     useState(true);
@@ -584,6 +614,54 @@ function App() {
     }
   }
 
+  async function createDatasetFromCorpus(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault();
+
+    if (
+      datasetGenerationForm.chunkOverlap >=
+      datasetGenerationForm.chunkSize
+    ) {
+      setError(
+        "El solapamiento debe ser menor que el tamaño del chunk.",
+      );
+      return;
+    }
+
+    setActionLoading(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const generatedDataset =
+        await generateDatasetFromCorpus(
+          datasetGenerationForm,
+        );
+
+      setDatasetGenerationForm(
+        EMPTY_DATASET_GENERATION_FORM,
+      );
+
+      setNotice(
+        `Dataset generado correctamente con ${generatedDataset.questions.length} preguntas.`,
+      );
+
+      await loadOverview();
+      await openDataset(
+        generatedDataset.id,
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "No se pudo generar el dataset desde el corpus.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function assignDataset(
     experimentId: string,
     datasetId: string,
@@ -722,261 +800,6 @@ function App() {
           void openRunResults(runId);
         }}
       />
-    );
-  }
-
-  function renderDatasets() {
-    return (
-      <>
-        <header className="page-header">
-          <div>
-            <span className="eyebrow">
-              Recursos de evaluación
-            </span>
-
-            <h1>Datasets</h1>
-
-            <p>
-              Gestiona las preguntas,
-              respuestas esperadas y datos
-              de evaluación.
-            </p>
-          </div>
-        </header>
-
-        <section className="content-grid datasets-layout">
-          <article className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>
-                  Datasets registrados
-                </h2>
-                <p>
-                  {datasets.length} conjuntos
-                  disponibles.
-                </p>
-              </div>
-            </div>
-
-            <div className="card-list">
-              {datasets.map(
-                (dataset) => (
-                  <button
-                    className="resource-card"
-                    type="button"
-                    key={dataset.id}
-                    onClick={() =>
-                      void openDataset(
-                        dataset.id,
-                      )
-                    }
-                  >
-                    <div>
-                      <strong>
-                        {dataset.name}
-                      </strong>
-                      <p>
-                        {dataset.description ||
-                          "Sin descripción"}
-                      </p>
-                    </div>
-
-                    <div className="resource-meta">
-                      <span>
-                        v{dataset.version}
-                      </span>
-                      <span>
-                        {
-                          dataset.question_count
-                        }{" "}
-                        preguntas
-                      </span>
-                      <span
-                        className={`status-badge status-${dataset.status}`}
-                      >
-                        {statusLabel(
-                          dataset.status,
-                        )}
-                      </span>
-                    </div>
-                  </button>
-                ),
-              )}
-
-              {datasets.length === 0 && (
-                <p className="empty-message">
-                  Todavía no hay datasets.
-                </p>
-              )}
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Nuevo dataset</h2>
-                <p>
-                  Crea un conjunto inicial
-                  con una pregunta.
-                </p>
-              </div>
-            </div>
-
-            <form
-              className="form-grid"
-              onSubmit={createDataset}
-            >
-              <label>
-                Nombre
-                <input
-                  required
-                  minLength={3}
-                  value={datasetForm.name}
-                  onChange={(event) =>
-                    setDatasetForm(
-                      (current) => ({
-                        ...current,
-                        name: event.target
-                          .value,
-                      }),
-                    )
-                  }
-                />
-              </label>
-
-              <label>
-                Descripción
-                <textarea
-                  rows={3}
-                  value={
-                    datasetForm.description
-                  }
-                  onChange={(event) =>
-                    setDatasetForm(
-                      (current) => ({
-                        ...current,
-                        description:
-                          event.target
-                            .value,
-                      }),
-                    )
-                  }
-                />
-              </label>
-
-              <label>
-                Pregunta inicial
-                <textarea
-                  required
-                  minLength={3}
-                  rows={3}
-                  value={
-                    datasetForm.question
-                  }
-                  onChange={(event) =>
-                    setDatasetForm(
-                      (current) => ({
-                        ...current,
-                        question:
-                          event.target
-                            .value,
-                      }),
-                    )
-                  }
-                />
-              </label>
-
-              <label>
-                Respuesta esperada
-                <textarea
-                  rows={3}
-                  value={
-                    datasetForm.expectedAnswer
-                  }
-                  onChange={(event) =>
-                    setDatasetForm(
-                      (current) => ({
-                        ...current,
-                        expectedAnswer:
-                          event.target
-                            .value,
-                      }),
-                    )
-                  }
-                />
-              </label>
-
-              <button
-                className="primary-button"
-                type="submit"
-                disabled={actionLoading}
-              >
-                Crear dataset
-              </button>
-            </form>
-          </article>
-        </section>
-
-        {selectedDataset && (
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>
-                  {selectedDataset.name}
-                </h2>
-                <p>
-                  Versión{" "}
-                  {selectedDataset.version} ·{" "}
-                  {
-                    selectedDataset.questions
-                      .length
-                  }{" "}
-                  preguntas
-                </p>
-              </div>
-
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() =>
-                  setSelectedDataset(null)
-                }
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="question-list">
-              {selectedDataset.questions.map(
-                (question) => (
-                  <article
-                    className="question-card"
-                    key={question.id}
-                  >
-                    <span>
-                      Pregunta{" "}
-                      {question.order_index +
-                        1}
-                    </span>
-
-                    <h3>
-                      {question.question}
-                    </h3>
-
-                    <p>
-                      <strong>
-                        Respuesta esperada:
-                      </strong>{" "}
-                      {question.expected_answer ||
-                        "No definida"}
-                    </p>
-                  </article>
-                ),
-              )}
-            </div>
-          </section>
-        )}
-      </>
     );
   }
 
@@ -1880,7 +1703,34 @@ function App() {
         return <CorporaPage />;
 
       case "datasets":
-        return renderDatasets();
+        return (
+          <DatasetsPage
+            corpora={corpora}
+            datasets={datasets}
+            selectedDataset={selectedDataset}
+            datasetForm={datasetForm}
+            datasetGenerationForm={
+              datasetGenerationForm
+            }
+            actionLoading={actionLoading}
+            onOpenDataset={(datasetId) => {
+              void openDataset(datasetId);
+            }}
+            onCloseDataset={() => {
+              setSelectedDataset(null);
+            }}
+            onDatasetFormChange={
+              setDatasetForm
+            }
+            onDatasetGenerationFormChange={
+              setDatasetGenerationForm
+            }
+            onCreateDataset={createDataset}
+            onGenerateDatasetFromCorpus={
+              createDatasetFromCorpus
+            }
+          />
+        );
 
       case "experiments":
         return renderExperiments();
