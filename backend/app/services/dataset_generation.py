@@ -22,6 +22,15 @@ from app.providers.generation import create_generation_provider
 from app.schemas.dataset import EvaluationDatasetGenerateRequest
 
 
+_ALLOWED_DIFFICULTIES = {"easy", "medium", "hard"}
+_ALLOWED_QUESTION_TYPES = {
+    "factual",
+    "conceptual",
+    "comparative",
+    "causal",
+}
+
+
 def _language_name(language: str) -> str:
     if language == "en":
         return "English"
@@ -29,86 +38,75 @@ def _language_name(language: str) -> str:
     return "Spanish"
 
 
-def _select_source_chunks(
+def _select_distributed_chunks(
     chunks: list[TextChunk],
-    maximum_characters: int = 12000,
+    question_count: int,
 ) -> list[TextChunk]:
-    if not chunks:
+    """
+    Selects chunks distributed across the whole document.
+
+    If the requested number is greater than the number of chunks, chunks are
+    reused in a balanced way. This preserves the API contract of generating
+    the requested number of questions per document while keeping each LLM call
+    limited to one chunk.
+    """
+    if not chunks or question_count <= 0:
         return []
 
-    selected: list[TextChunk] = []
-    accumulated_characters = 0
+    if question_count == 1:
+        return [chunks[len(chunks) // 2]]
 
-    for chunk in chunks:
-        if (
-            selected
-            and accumulated_characters + len(chunk.text)
-            > maximum_characters
-        ):
-            break
+    last_index = len(chunks) - 1
 
-        selected.append(chunk)
-        accumulated_characters += len(chunk.text)
-
-    return selected
+    return [
+        chunks[round(index * last_index / (question_count - 1))]
+        for index in range(question_count)
+    ]
 
 
 def _build_generation_prompt(
     *,
     filename: str,
-    chunks: list[TextChunk],
-    question_count: int,
+    chunk: TextChunk,
     language: str,
+    question_number: int,
+    total_questions: int,
 ) -> str:
-    source_sections = []
-
-    for chunk in chunks:
-        source_sections.append(
-            "\n".join(
-                [
-                    f"[CHUNK {chunk.position}]",
-                    chunk.text,
-                ]
-            )
-        )
-
-    source_text = "\n\n".join(source_sections)
     output_language = _language_name(language)
 
     return f"""
 You are creating a ground-truth evaluation dataset for a
 Retrieval-Augmented Generation system.
 
-Generate exactly {question_count} questions from the supplied document.
+Generate exactly ONE question from the supplied text chunk.
 
 Requirements:
-- Write the questions and answers in {output_language}.
-- Every answer must be supported exclusively by the supplied text.
+- Write the question and answer in {output_language}.
+- The answer must be supported exclusively by the supplied text.
 - Do not use outside knowledge.
-- Avoid vague or opinion-based questions.
-- Prefer questions that evaluate factual understanding.
-- Each expected_answer must be concise but complete.
-- Each expected_context must contain the exact supporting passage.
+- Avoid vague, opinion-based or unanswerable questions.
+- Prefer questions that evaluate factual or conceptual understanding.
+- The expected_answer must be concise but complete.
+- Do not copy a previous generic question pattern when a more specific one
+  can be created from the chunk.
 - Return valid JSON only.
 - Do not use Markdown fences.
-- Return a JSON array with this exact structure:
+- Return one JSON object with this exact structure:
 
-[
-  {{
-    "question": "Question text",
-    "expected_answer": "Ground-truth answer",
-    "expected_context": "Supporting passage",
-    "chunk_position": 0,
-    "difficulty": "easy|medium|hard",
-    "question_type": "factual|conceptual|comparative|causal"
-  }}
-]
+{{
+  "question": "Question text",
+  "expected_answer": "Ground-truth answer",
+  "difficulty": "easy|medium|hard",
+  "question_type": "factual|conceptual|comparative|causal"
+}}
 
 Document: {filename}
+Question number for this document: {question_number} of {total_questions}
+Chunk position: {chunk.position}
 
-SOURCE TEXT:
+SOURCE CHUNK:
 
-{source_text}
+{chunk.text}
 """.strip()
 
 
@@ -127,18 +125,18 @@ def _remove_markdown_fences(text: str) -> str:
     return cleaned
 
 
-def _extract_json_array(text: str) -> list[dict[str, Any]]:
+def _extract_json_object(text: str) -> dict[str, Any]:
     cleaned = _remove_markdown_fences(text)
 
     try:
         payload = json.loads(cleaned)
     except json.JSONDecodeError:
-        start = cleaned.find("[")
-        end = cleaned.rfind("]")
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
 
         if start < 0 or end < start:
             raise ValueError(
-                "El modelo no devolvió un array JSON válido."
+                "El modelo no devolvió un objeto JSON válido."
             )
 
         try:
@@ -148,47 +146,51 @@ def _extract_json_array(text: str) -> list[dict[str, Any]]:
                 "No se pudo interpretar el JSON generado por el modelo."
             ) from exc
 
-    if not isinstance(payload, list):
+    # Tolerate a one-element array in case the model ignores the requested
+    # object format.
+    if isinstance(payload, list):
+        if len(payload) != 1 or not isinstance(payload[0], dict):
+            raise ValueError(
+                "La respuesta generada debe contener un único objeto JSON."
+            )
+
+        payload = payload[0]
+
+    if not isinstance(payload, dict):
         raise ValueError(
-            "La respuesta generada debe ser un array JSON."
+            "La respuesta generada debe ser un objeto JSON."
         )
 
-    validated_items: list[dict[str, Any]] = []
+    question = payload.get("question")
+    expected_answer = payload.get("expected_answer")
 
-    for position, item in enumerate(payload):
-        if not isinstance(item, dict):
-            raise ValueError(
-                f"El elemento {position} no es un objeto JSON."
-            )
+    if not isinstance(question, str) or len(question.strip()) < 3:
+        raise ValueError(
+            "La pregunta generada no es válida."
+        )
 
-        question = item.get("question")
-        expected_answer = item.get("expected_answer")
-        expected_context = item.get("expected_context")
+    if (
+        not isinstance(expected_answer, str)
+        or not expected_answer.strip()
+    ):
+        raise ValueError(
+            "La respuesta generada no es válida."
+        )
 
-        if not isinstance(question, str) or len(question.strip()) < 3:
-            raise ValueError(
-                f"La pregunta generada en la posición {position} no es válida."
-            )
+    difficulty = payload.get("difficulty", "medium")
+    if difficulty not in _ALLOWED_DIFFICULTIES:
+        difficulty = "medium"
 
-        if (
-            not isinstance(expected_answer, str)
-            or not expected_answer.strip()
-        ):
-            raise ValueError(
-                f"La respuesta generada en la posición {position} no es válida."
-            )
+    question_type = payload.get("question_type", "factual")
+    if question_type not in _ALLOWED_QUESTION_TYPES:
+        question_type = "factual"
 
-        if (
-            not isinstance(expected_context, str)
-            or not expected_context.strip()
-        ):
-            raise ValueError(
-                f"El contexto generado en la posición {position} no es válido."
-            )
-
-        validated_items.append(item)
-
-    return validated_items
+    return {
+        "question": question.strip(),
+        "expected_answer": expected_answer.strip(),
+        "difficulty": difficulty,
+        "question_type": question_type,
+    }
 
 
 async def _load_corpus(
@@ -268,7 +270,7 @@ async def generate_dataset_from_corpus(
         description=(
             payload.description
             or (
-                f"Dataset generado automáticamente desde "
+                "Dataset generado automáticamente desde "
                 f"el corpus '{corpus.name}'."
             )
         ),
@@ -294,24 +296,68 @@ async def generate_dataset_from_corpus(
                 chunk_overlap=payload.chunk_overlap,
             )
 
-            selected_chunks = _select_source_chunks(chunks)
+            selected_chunks = _select_distributed_chunks(
+                chunks=chunks,
+                question_count=payload.questions_per_document,
+            )
 
             if not selected_chunks:
                 continue
 
-            generation_result = await provider.generate(
-                prompt=_build_generation_prompt(
-                    filename=document.filename,
-                    chunks=selected_chunks,
-                    question_count=payload.questions_per_document,
-                    language=payload.language,
-                ),
-                temperature=payload.temperature,
-            )
+            for question_number, chunk in enumerate(
+                selected_chunks,
+                start=1,
+            ):
+                generation_result = await provider.generate(
+                    prompt=_build_generation_prompt(
+                        filename=document.filename,
+                        chunk=chunk,
+                        language=payload.language,
+                        question_number=question_number,
+                        total_questions=(
+                            payload.questions_per_document
+                        ),
+                    ),
+                    temperature=payload.temperature,
+                )
 
-            generated_items = _extract_json_array(
-                generation_result.text
-            )
+                item = _extract_json_object(
+                    generation_result.text
+                )
+
+                metadata = {
+                    "generation_source": "corpus",
+                    "generation_strategy": "one_question_per_chunk",
+                    "corpus_id": str(corpus.id),
+                    "corpus_name": corpus.name,
+                    "document_id": str(document.id),
+                    "source_document": document.filename,
+                    "chunk_position": chunk.position,
+                    "difficulty": item["difficulty"],
+                    "question_type": item["question_type"],
+                    "review_status": "pending",
+                    "generator_provider": payload.provider,
+                    "generator_model": generation_result.model,
+                    "language": payload.language,
+                    "chunking_strategy": payload.chunking_strategy,
+                    "chunk_size": payload.chunk_size,
+                    "chunk_overlap": payload.chunk_overlap,
+                    "question_number_in_document": question_number,
+                }
+
+                dataset.questions.append(
+                    EvaluationQuestion(
+                        question=item["question"],
+                        expected_answer=item["expected_answer"],
+                        # The exact source chunk is stored as ground truth
+                        # context instead of trusting the model to reproduce it.
+                        expected_contexts=[chunk.text.strip()],
+                        question_metadata=metadata,
+                        order_index=generated_question_count,
+                    )
+                )
+
+                generated_question_count += 1
 
         except Exception as exc:
             raise HTTPException(
@@ -321,51 +367,6 @@ async def generate_dataset_from_corpus(
                     f"'{document.filename}': {exc}"
                 ),
             ) from exc
-
-        for item in generated_items[
-            : payload.questions_per_document
-        ]:
-            chunk_position = item.get("chunk_position")
-
-            metadata = {
-                "generation_source": "corpus",
-                "corpus_id": str(corpus.id),
-                "corpus_name": corpus.name,
-                "document_id": str(document.id),
-                "source_document": document.filename,
-                "chunk_position": chunk_position,
-                "difficulty": item.get(
-                    "difficulty",
-                    "medium",
-                ),
-                "question_type": item.get(
-                    "question_type",
-                    "factual",
-                ),
-                "review_status": "pending",
-                "generator_provider": payload.provider,
-                "generator_model": generation_result.model,
-                "language": payload.language,
-                "chunking_strategy": payload.chunking_strategy,
-                "chunk_size": payload.chunk_size,
-                "chunk_overlap": payload.chunk_overlap,
-            }
-
-            dataset.questions.append(
-                EvaluationQuestion(
-                    question=item["question"].strip(),
-                    expected_answer=(
-                        item["expected_answer"].strip()
-                    ),
-                    expected_contexts=[
-                        item["expected_context"].strip()
-                    ],
-                    question_metadata=metadata,
-                    order_index=generated_question_count,
-                )
-            )
-
-            generated_question_count += 1
 
     if generated_question_count == 0:
         raise HTTPException(
