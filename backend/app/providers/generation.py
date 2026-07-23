@@ -35,7 +35,7 @@ class OllamaGenerationProvider(GenerationProvider):
     def __init__(
         self,
         model: str,
-        timeout_seconds: float = 600.0,
+        timeout_seconds: float = 1800.0,
     ) -> None:
         if not model.strip():
             raise ValueError(
