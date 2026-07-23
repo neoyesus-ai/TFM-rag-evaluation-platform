@@ -648,8 +648,8 @@ function App() {
       );
 
       await loadOverview();
-      await openDataset(
-        generatedDataset.id,
+      setSelectedDataset(
+        generatedDataset,
       );
     } catch (requestError) {
       setError(
