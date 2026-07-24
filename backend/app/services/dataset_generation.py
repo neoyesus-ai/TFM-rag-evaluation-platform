@@ -30,6 +30,16 @@ _ALLOWED_QUESTION_TYPES = {
     "causal",
 }
 
+_MIN_INFORMATIVE_CHUNK_CHARS = 300
+_REFERENCE_HEADING_PATTERN = re.compile(
+    r"^\s*(references|bibliography|works cited)\s*$",
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+_CITATION_LINE_PATTERN = re.compile(
+    r"^\s*(?:\[?\d+\]?\s*[.)]?|[A-Z][A-Za-z'-]+,\s+[A-Z])",
+    flags=re.MULTILINE,
+)
+
 
 def _language_name(language: str) -> str:
     if language == "en":
@@ -38,28 +48,83 @@ def _language_name(language: str) -> str:
     return "Spanish"
 
 
+def _looks_like_table(text: str) -> bool:
+    """Returns True when a chunk is dominated by table-like rows."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 4:
+        return False
+
+    table_like_lines = sum(
+        1
+        for line in lines
+        if line.count("|") >= 2
+        or line.count("\t") >= 2
+        or len(re.findall(r"\s{3,}", line)) >= 2
+    )
+
+    return table_like_lines / len(lines) >= 0.6
+
+
+def _looks_like_references(text: str) -> bool:
+    """Returns True when a chunk appears to be bibliography/references."""
+    if _REFERENCE_HEADING_PATTERN.search(text):
+        return True
+
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) < 4:
+        return False
+
+    citation_lines = len(_CITATION_LINE_PATTERN.findall(text))
+    year_mentions = len(re.findall(r"\b(?:19|20)\d{2}[a-z]?\b", text))
+
+    return (
+        citation_lines / len(lines) >= 0.5
+        and year_mentions >= max(3, len(lines) // 3)
+    )
+
+
+def _is_informative_chunk(chunk: TextChunk) -> bool:
+    """Filters fragments unlikely to produce useful benchmark questions."""
+    text = chunk.text.strip()
+
+    if len(text) < _MIN_INFORMATIVE_CHUNK_CHARS:
+        return False
+
+    if _looks_like_table(text) or _looks_like_references(text):
+        return False
+
+    return True
+
+
 def _select_distributed_chunks(
     chunks: list[TextChunk],
     question_count: int,
 ) -> list[TextChunk]:
     """
-    Selects chunks distributed across the whole document.
+    Selects informative chunks distributed across the whole document.
 
-    If the requested number is greater than the number of chunks, chunks are
-    reused in a balanced way. This preserves the API contract of generating
-    the requested number of questions per document while keeping each LLM call
-    limited to one chunk.
+    Very short fragments, table-dominated chunks and bibliography-like chunks
+    are excluded when possible. If every chunk is filtered out, the original
+    list is used as a safe fallback. When the requested number is greater than
+    the number of available chunks, chunks are reused in a balanced way.
     """
     if not chunks or question_count <= 0:
         return []
 
-    if question_count == 1:
-        return [chunks[len(chunks) // 2]]
+    informative_chunks = [
+        chunk for chunk in chunks if _is_informative_chunk(chunk)
+    ]
+    candidate_chunks = informative_chunks or chunks
 
-    last_index = len(chunks) - 1
+    if question_count == 1:
+        return [candidate_chunks[len(candidate_chunks) // 2]]
+
+    last_index = len(candidate_chunks) - 1
 
     return [
-        chunks[round(index * last_index / (question_count - 1))]
+        candidate_chunks[
+            round(index * last_index / (question_count - 1))
+        ]
         for index in range(question_count)
     ]
 
@@ -331,7 +396,12 @@ async def generate_dataset_from_corpus(
                     "corpus_id": str(corpus.id),
                     "corpus_name": corpus.name,
                     "document_id": str(document.id),
+                    # Keep the original key for backward compatibility.
                     "source_document": document.filename,
+                    "source_document_filename": document.filename,
+                    "chunk_id": (
+                        f"{document.id}:chunk:{chunk.position}"
+                    ),
                     "chunk_position": chunk.position,
                     "difficulty": item["difficulty"],
                     "question_type": item["question_type"],
