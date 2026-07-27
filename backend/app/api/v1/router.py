@@ -1,5 +1,8 @@
 from fastapi import APIRouter
 
+from app.rag_console.router import (
+    api_router as rag_console_router,
+)
 from app.analytics.endpoints import (
     router as analytics_router,
 )
@@ -56,4 +59,7 @@ api_router.include_router(
 )
 api_router.include_router(
     experiment_runs_router
+)
+api_router.include_router(
+    rag_console_router
 )
