@@ -4,6 +4,7 @@ export type AppView =
   | "datasets"
   | "experiments"
   | "runs"
+  | "rag-console"
   | "analytics"
   | "comparator"
   | "leaderboard"
@@ -66,6 +67,13 @@ export const NAVIGATION_GROUPS: NavigationGroup[] = [
         description:
           "Histórico de runs",
         icon: "RN",
+      },
+      {
+        view: "rag-console",
+        label: "Consola RAG",
+        description:
+          "Consultas interactivas",
+        icon: "RG",
       },
     ],
   },

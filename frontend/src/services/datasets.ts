@@ -31,16 +31,10 @@ export type DatasetSummary = {
   updated_at: string;
 };
 
-export type DatasetDetail = {
-  id: string;
-  name: string;
-  description: string | null;
-  version: number;
-  status: DatasetStatus;
-  created_at: string;
-  updated_at: string;
-  questions: DatasetQuestion[];
-};
+export type DatasetDetail =
+  DatasetSummary & {
+    questions: DatasetQuestion[];
+  };
 
 export type DatasetQuestionCreate = {
   question: string;

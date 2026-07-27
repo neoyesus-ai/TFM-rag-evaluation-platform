@@ -316,6 +316,8 @@ function ResultMetricCard({
   );
 }
 
+import RagConsolePage from "./components/rag-console/RagConsolePage";
+
 function App() {
   const [view, setView] =
     useState<AppView>("dashboard");
@@ -1752,6 +1754,9 @@ function App() {
 
       case "recommendations":
         return <RecommendationsPage />;
+
+      case "rag-console":
+        return <RagConsolePage />;
 
       case "services":
         return renderServices();
